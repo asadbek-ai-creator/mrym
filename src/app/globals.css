@@ -1,26 +1,106 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * Design tokens.
+ *
+ * The series / chrome values come from the validated data-viz palette: the
+ * six categorical slots pass the lightness, chroma, CVD and normal-vision
+ * gates on both surfaces. Light-mode slots 3, 4 and 5 sit below 3:1 against
+ * the surface, so every chart that uses them ships visible value labels.
+ */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root {
+  --plane: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-sunken: #f3f3f0;
+
+  --ink: #0b0b0b;
+  --ink-secondary: #52514e;
+  --ink-muted: #898781;
+
+  --line: #e1e0d9;
+  --axis: #c3c2b7;
+  --ring: rgba(11, 11, 11, 0.1);
+
+  --series-1: #2a78d6; /* blue    — income */
+  --series-2: #eb6834; /* orange  — expense */
+  --series-3: #1baf7a; /* aqua    */
+  --series-4: #eda100; /* yellow  */
+  --series-5: #e87ba4; /* magenta */
+  --series-6: #008300; /* green   */
+
+  --diverge-pos: #2a78d6;
+  --diverge-neg: #d03b3b;
+  --diverge-mid: #f0efec;
+
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --plane: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-sunken: #131312;
+
+    --ink: #ffffff;
+    --ink-secondary: #c3c2b7;
+    --ink-muted: #898781;
+
+    --line: #2c2c2a;
+    --axis: #383835;
+    --ring: rgba(255, 255, 255, 0.1);
+
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+
+    --diverge-pos: #3987e5;
+    --diverge-neg: #d03b3b;
+    --diverge-mid: #383835;
   }
 }
 
+@theme inline {
+  --color-plane: var(--plane);
+  --color-surface: var(--surface);
+  --color-sunken: var(--surface-sunken);
+
+  --color-ink: var(--ink);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-ink-muted: var(--ink-muted);
+
+  --color-line: var(--line);
+  --color-axis: var(--axis);
+
+  --color-good: var(--good);
+  --color-warning: var(--warning);
+  --color-critical: var(--critical);
+
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--plane);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Columns of figures align; standalone display numbers stay proportional. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Recharts draws its own focus outlines around the whole surface. */
+.recharts-wrapper:focus,
+.recharts-surface:focus {
+  outline: none;
 }

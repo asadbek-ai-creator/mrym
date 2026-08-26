@@ -1,0 +1,139 @@
+// Prisma schema for the Financial Accounting System
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Enums ----------
+
+enum Role {
+  ADMIN
+  ACCOUNTANT
+  CASHIER
+}
+
+enum TxType {
+  INCOME
+  EXPENSE
+}
+
+enum TxSource {
+  CASH
+  BANK
+}
+
+enum Currency {
+  UZS
+  USD
+}
+
+enum CreditStatus {
+  ACTIVE
+  CLOSED
+}
+
+// ---------- Models ----------
+
+model User {
+  id           String        @id @default(cuid())
+  telegramId   BigInt        @unique
+  name         String
+  role         Role          @default(CASHIER)
+  createdAt    DateTime      @default(now())
+
+  transactions Transaction[]
+  credits      Credit[]
+  logs         ActionLog[]
+
+  @@map("users")
+}
+
+model Transaction {
+  id        String   @id @default(cuid())
+  type      TxType
+  source    TxSource
+  amount    Decimal  @db.Decimal(18, 2)
+  currency  Currency @default(UZS)
+  category  String?
+  comment   String?
+  // Bank-specific optional fields
+  bankName     String?
+  counterparty String?
+  // Business date of the transaction (may differ from createdAt)
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([source, type])
+  @@index([date])
+  @@map("transactions")
+}
+
+model Credit {
+  id          String          @id @default(cuid())
+  bankName    String
+  totalAmount Decimal         @db.Decimal(18, 2)
+  currency    Currency        @default(UZS)
+  duration    Int // number of months
+  status      CreditStatus    @default(ACTIVE)
+  createdAt   DateTime        @default(now())
+
+  userId   String
+  user     User            @relation(fields: [userId], references: [id])
+  payments CreditPayment[]
+
+  @@index([userId])
+  @@map("credits")
+}
+
+model CreditPayment {
+  id       String    @id @default(cuid())
+  amount   Decimal   @db.Decimal(18, 2)
+  dueDate  DateTime
+  isPaid   Boolean   @default(false)
+  paidDate DateTime?
+
+  creditId String
+  credit   Credit @relation(fields: [creditId], references: [id], onDelete: Cascade)
+
+  @@index([creditId])
+  @@index([isPaid])
+  @@map("credit_payments")
+}
+
+// Conversational state for the Telegram bot.
+// Serverless invocations are stateless, so the wizard state lives in the DB,
+// keyed by the Telegram chat id.
+model BotSession {
+  chatId    BigInt   @id
+  // Current wizard step, e.g. "cash:amount". Null/absent means idle.
+  step      String?
+  // Partially collected wizard data as JSON.
+  data      Json     @default("{}")
+  updatedAt DateTime @updatedAt
+
+  @@map("bot_sessions")
+}
+
+model ActionLog {
+  id        String   @id @default(cuid())
+  action    String
+  details   String?
+  timestamp DateTime @default(now())
+
+  userId String?
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([timestamp])
+  @@map("action_logs")
+}
