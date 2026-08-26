@@ -44,6 +44,15 @@ enum Locale {
   EN
 }
 
+// Anyone may ask the bot for access; an admin decides what happens next.
+// PENDING is the default so a row that appears without an explicit decision
+// can never carry permissions.
+enum UserStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+}
+
 // ---------- Models ----------
 
 model User {
@@ -51,6 +60,7 @@ model User {
   telegramId   BigInt        @unique
   name         String
   role         Role          @default(CASHIER)
+  status       UserStatus    @default(PENDING)
   language     Locale        @default(RU)
   createdAt    DateTime      @default(now())
 

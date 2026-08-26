@@ -37,6 +37,7 @@ export function mainMenu(role: Role, locale: Locale): Keyboard {
 
   if (can(role, "ADMIN")) {
     kb.row().text(label("btn.logs")).text(label("btn.users"));
+    kb.row().text(label("btn.requests"));
   }
 
   return kb.resized().persistent();

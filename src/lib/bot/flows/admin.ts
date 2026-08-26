@@ -1,8 +1,8 @@
 import { Composer, InlineKeyboard } from "grammy";
-import { Role } from "@prisma/client";
+import { Role, UserStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logAction, requireModule } from "../auth";
-import { labels, roleBadge, roleLabel } from "../i18n";
+import { labels, roleBadge, roleLabel, t } from "../i18n";
 import { esc, fmtDateTime } from "../format";
 import type { BotContext } from "../types";
 
@@ -37,6 +37,127 @@ adminFlow.hears(labels("btn.logs"), requireModule("ADMIN"), async (ctx) => {
     `${ctx.t("admin.logTitle", { count: logs.length })}\n\n${lines.join("\n\n")}`,
     { parse_mode: "HTML" }
   );
+});
+
+
+// ---------- Access requests ----------
+
+/** Buttons offered for one pending applicant. */
+function decisionKeyboard(ctx: BotContext, applicantId: string): InlineKeyboard {
+  return new InlineKeyboard()
+    .text(ctx.t("req.asCashier"), `appr:${applicantId}:CASHIER`)
+    .text(ctx.t("req.asAccountant"), `appr:${applicantId}:ACCOUNTANT`)
+    .row()
+    .text(ctx.t("req.reject"), `rej:${applicantId}`);
+}
+
+adminFlow.hears(labels("btn.requests"), requireModule("ADMIN"), async (ctx) => {
+  const pending = await prisma.user.findMany({
+    where: { status: UserStatus.PENDING },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (pending.length === 0) {
+    await ctx.reply(ctx.t("req.empty"), { parse_mode: "HTML" });
+    return;
+  }
+
+  await ctx.reply(ctx.t("req.title", { count: pending.length }), {
+    parse_mode: "HTML",
+  });
+
+  // One message per applicant, so each carries its own decision buttons.
+  for (const applicant of pending) {
+    await ctx.reply(
+      `<b>${esc(applicant.name)}</b>
+<code>${applicant.telegramId}</code>`,
+      { parse_mode: "HTML", reply_markup: decisionKeyboard(ctx, applicant.id) }
+    );
+  }
+});
+
+/**
+ * Approving sets the role and activates the account, then tells the applicant
+ * in their own language. A request that someone else already handled is
+ * reported rather than silently re-applied.
+ */
+adminFlow.callbackQuery(
+  /^appr:(.+):(CASHIER|ACCOUNTANT)$/,
+  requireModule("ADMIN"),
+  async (ctx) => {
+    const [, applicantId, rawRole] = ctx.match!;
+    const role = rawRole as Role;
+
+    const applicant = await prisma.user.findUnique({ where: { id: applicantId } });
+    if (!applicant) {
+      await ctx.answerCallbackQuery(ctx.t("admin.userNotFound"));
+      return;
+    }
+    if (applicant.status !== UserStatus.PENDING) {
+      await ctx.answerCallbackQuery(ctx.t("req.alreadyHandled"));
+      return;
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: applicant.id },
+      data: { role, status: UserStatus.ACTIVE },
+    });
+
+    await logAction(
+      ctx.user.id,
+      "ACCESS_GRANTED",
+      `${updated.name} · ${role} · ${updated.telegramId}`
+    );
+
+    // The applicant may have blocked the bot in the meantime.
+    await ctx.api
+      .sendMessage(
+        updated.telegramId.toString(),
+        t(updated.language, "access.granted", {
+          role: roleLabel(updated.language, role),
+        }),
+        { parse_mode: "HTML" }
+      )
+      .catch(() => undefined);
+
+    await ctx.answerCallbackQuery(roleLabel(ctx.locale, role));
+    await ctx.editMessageText(
+      ctx.t("req.approved", {
+        name: esc(updated.name),
+        role: roleLabel(ctx.locale, role),
+      }),
+      { parse_mode: "HTML" }
+    ).catch(() => undefined);
+  }
+);
+
+adminFlow.callbackQuery(/^rej:(.+)$/, requireModule("ADMIN"), async (ctx) => {
+  const applicant = await prisma.user.findUnique({ where: { id: ctx.match![1] } });
+  if (!applicant) {
+    await ctx.answerCallbackQuery(ctx.t("admin.userNotFound"));
+    return;
+  }
+  if (applicant.status !== UserStatus.PENDING) {
+    await ctx.answerCallbackQuery(ctx.t("req.alreadyHandled"));
+    return;
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: applicant.id },
+    data: { status: UserStatus.REJECTED },
+  });
+
+  await logAction(
+    ctx.user.id,
+    "ACCESS_DECLINED",
+    `${updated.name} · ${updated.telegramId}`
+  );
+
+  await ctx.answerCallbackQuery(ctx.t("req.reject"));
+  await ctx.editMessageText(
+    ctx.t("req.rejectedDone", { name: esc(updated.name) }),
+    { parse_mode: "HTML" }
+  ).catch(() => undefined);
 });
 
 // ---------- Users ----------
@@ -86,8 +207,8 @@ adminFlow.command("adduser", requireModule("ADMIN"), async (ctx) => {
   const name = nameParts.join(" ");
   const user = await prisma.user.upsert({
     where: { telegramId },
-    create: { telegramId, name, role },
-    update: { name, role },
+    create: { telegramId, name, role, status: UserStatus.ACTIVE },
+    update: { name, role, status: UserStatus.ACTIVE },
   });
 
   await logAction(ctx.user.id, "USER_UPSERTED", `${name} · ${role} · ${telegramId}`);
@@ -162,11 +283,12 @@ adminFlow.callbackQuery(/^revoke:(.+)$/, requireModule("ADMIN"), async (ctx) => 
 
   await prisma.user.update({
     where: { id: user.id },
-    data: {
-      telegramId: -user.telegramId,
-      name: `${user.name} (revoked)`,
-    },
+    data: { status: UserStatus.REJECTED },
   });
+
+  await ctx.api
+    .sendMessage(user.telegramId.toString(), t(user.language, "access.revokedNotice"))
+    .catch(() => undefined);
 
   await logAction(ctx.user.id, "USER_ACCESS_REVOKED", `${user.name} · ${user.telegramId}`);
   await ctx.answerCallbackQuery(ctx.t("admin.accessRevoked"));

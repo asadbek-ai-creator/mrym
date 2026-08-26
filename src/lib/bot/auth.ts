@@ -1,8 +1,9 @@
-import { Locale, Role } from "@prisma/client";
-import type { MiddlewareFn } from "grammy";
+import { Locale, Role, UserStatus, type User } from "@prisma/client";
+import { InlineKeyboard, type MiddlewareFn } from "grammy";
 import { prisma } from "@/lib/prisma";
 import { bootstrapAdminIds } from "@/lib/env";
 import { t, translator } from "./i18n";
+import { esc } from "./format";
 import type { BotContext } from "./types";
 
 /** Modules of the system, used for permission checks. */
@@ -26,9 +27,13 @@ export function withinEditWindow(createdAt: Date): boolean {
 }
 
 /**
- * Resolves the Telegram user to a registered `User` row and rejects everyone
- * else. Ids listed in `ADMIN_TELEGRAM_IDS` are auto-provisioned as ADMIN so
- * the owner can get in before any user exists.
+ * Resolves the Telegram user and decides whether they may go any further.
+ *
+ * Anyone may talk to the bot, but a first contact only files an access
+ * request: the row is created PENDING, which carries no permissions, and the
+ * admins are notified so a human makes the decision. Ids listed in
+ * `ADMIN_TELEGRAM_IDS` are provisioned — and repaired — as active admins, so
+ * the owner can never lock themselves out.
  */
 export const authMiddleware: MiddlewareFn<BotContext> = async (ctx, next) => {
   const from = ctx.from;
@@ -39,26 +44,46 @@ export const authMiddleware: MiddlewareFn<BotContext> = async (ctx, next) => {
     [from.first_name, from.last_name].filter(Boolean).join(" ") ||
     from.username ||
     `User ${from.id}`;
+  const isBootstrapAdmin = bootstrapAdminIds().includes(telegramId);
 
   let user = await prisma.user.findUnique({ where: { telegramId } });
 
-  if (!user && bootstrapAdminIds().includes(telegramId)) {
+  if (!user) {
     user = await prisma.user.create({
       data: {
         telegramId,
         name: displayName,
-        role: Role.ADMIN,
+        role: isBootstrapAdmin ? Role.ADMIN : Role.CASHIER,
+        status: isBootstrapAdmin ? UserStatus.ACTIVE : UserStatus.PENDING,
         language: guessLocale(from.language_code),
       },
     });
+
+    if (!isBootstrapAdmin) {
+      await logAction(user.id, "ACCESS_REQUESTED", `${displayName} · ${telegramId}`);
+      await notifyAdminsOfRequest(ctx, user, from.username);
+      await ctx.reply(
+        t(user.language, "access.requestSent", {
+          name: esc(displayName),
+          id: from.id,
+        }),
+        { parse_mode: "HTML" }
+      );
+      return;
+    }
+  } else if (isBootstrapAdmin && user.status !== UserStatus.ACTIVE) {
+    // Self-healing: the owner stays reachable even if their row was left
+    // pending by a migration or revoked by mistake.
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: { status: UserStatus.ACTIVE, role: Role.ADMIN },
+    });
   }
 
-  if (!user) {
-    // No stored preference yet, so fall back to the Telegram client's own
-    // language for the one message this person is allowed to see.
-    await ctx.reply(t(guessLocale(from.language_code), "auth.denied", { id: from.id }), {
-      parse_mode: "HTML",
-    });
+  if (user.status !== UserStatus.ACTIVE) {
+    const key =
+      user.status === UserStatus.PENDING ? "access.pending" : "access.rejected";
+    await ctx.reply(t(user.language, key, { id: from.id }), { parse_mode: "HTML" });
     return;
   }
 
@@ -68,6 +93,40 @@ export const authMiddleware: MiddlewareFn<BotContext> = async (ctx, next) => {
   ctx.t = translator(user.language);
   await next();
 };
+
+/**
+ * Pushes a new request to every active admin. Admins who have never opened
+ * the bot cannot be messaged, so a failure here must not break the request.
+ */
+async function notifyAdminsOfRequest(
+  ctx: BotContext,
+  applicant: User,
+  username: string | undefined
+): Promise<void> {
+  const admins = await prisma.user.findMany({
+    where: { role: Role.ADMIN, status: UserStatus.ACTIVE },
+  });
+
+  for (const admin of admins) {
+    const keyboard = new InlineKeyboard()
+      .text(t(admin.language, "req.asCashier"), `appr:${applicant.id}:CASHIER`)
+      .text(t(admin.language, "req.asAccountant"), `appr:${applicant.id}:ACCOUNTANT`)
+      .row()
+      .text(t(admin.language, "req.reject"), `rej:${applicant.id}`);
+
+    await ctx.api
+      .sendMessage(
+        admin.telegramId.toString(),
+        t(admin.language, "req.newRequest", {
+          name: esc(applicant.name),
+          id: applicant.telegramId.toString(),
+          username: username ? `\n@${esc(username)}` : "",
+        }),
+        { parse_mode: "HTML", reply_markup: keyboard }
+      )
+      .catch(() => undefined);
+  }
+}
 
 /** Maps a Telegram `language_code` onto a language the bot actually speaks. */
 export function guessLocale(code: string | undefined): Locale {

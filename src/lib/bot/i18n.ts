@@ -182,6 +182,29 @@ const en = {
   "admin.accessRevoked": "Access revoked",
   "admin.accessRevokedFull": "🚫 Access revoked for <b>{name}</b>.",
 
+  // ---------- Access requests ----------
+  "access.requestSent":
+    "👋 Hello, <b>{name}</b>!\n\nYour access request has been sent to the administrator.\nYour Telegram ID: <code>{id}</code>\n\nYou will get a message here once it is reviewed.",
+  "access.pending":
+    "⏳ Your request is still waiting for the administrator.\nYour Telegram ID: <code>{id}</code>",
+  "access.rejected":
+    "⛔️ The administrator declined your access request.\nYour Telegram ID: <code>{id}</code>",
+  "access.granted":
+    "✅ <b>Access granted!</b>\n\nYour role: <b>{role}</b>\nPress /start to begin.",
+  "access.revokedNotice": "⛔️ Your access has been withdrawn by the administrator.",
+
+  "req.newRequest":
+    "🔔 <b>New access request</b>\n\n<b>{name}</b>\n<code>{id}</code>{username}\n\nWhat should this person be allowed to do?",
+  "req.asCashier": "✅ Cashier",
+  "req.asAccountant": "✅ Accountant",
+  "req.reject": "🚫 Decline",
+  "req.approved": "✅ <b>{name}</b> — access granted as {role}.",
+  "req.rejectedDone": "🚫 <b>{name}</b> — request declined.",
+  "req.alreadyHandled": "This request has already been handled.",
+  "req.title": "⏳ <b>Pending requests ({count})</b>",
+  "req.empty": "⏳ There are no pending requests.",
+  "btn.requests": "⏳ Requests",
+
   // ---------- Excel export ----------
   "xls.sheetTransactions": "Transactions",
   "xls.sheetPayments": "Credit payments",
@@ -403,6 +426,29 @@ const ru_: Record<TranslationKey, string> = {
   "admin.accessRevoked": "Доступ отозван",
   "admin.accessRevokedFull": "🚫 Доступ отозван для <b>{name}</b>.",
 
+  // ---------- Access requests ----------
+  "access.requestSent":
+    "👋 Здравствуйте, <b>{name}</b>!\n\nВаша заявка на доступ отправлена администратору.\nВаш Telegram ID: <code>{id}</code>\n\nКогда её рассмотрят, вам придёт сообщение сюда.",
+  "access.pending":
+    "⏳ Ваша заявка ещё на рассмотрении у администратора.\nВаш Telegram ID: <code>{id}</code>",
+  "access.rejected":
+    "⛔️ Администратор отклонил вашу заявку на доступ.\nВаш Telegram ID: <code>{id}</code>",
+  "access.granted":
+    "✅ <b>Доступ выдан!</b>\n\nВаша роль: <b>{role}</b>\nНажмите /start, чтобы начать.",
+  "access.revokedNotice": "⛔️ Администратор отозвал ваш доступ.",
+
+  "req.newRequest":
+    "🔔 <b>Новая заявка на доступ</b>\n\n<b>{name}</b>\n<code>{id}</code>{username}\n\nЧто разрешить этому человеку?",
+  "req.asCashier": "✅ Кассир",
+  "req.asAccountant": "✅ Бухгалтер",
+  "req.reject": "🚫 Отклонить",
+  "req.approved": "✅ <b>{name}</b> — доступ выдан как {role}.",
+  "req.rejectedDone": "🚫 <b>{name}</b> — заявка отклонена.",
+  "req.alreadyHandled": "Эта заявка уже обработана.",
+  "req.title": "⏳ <b>Заявки на доступ ({count})</b>",
+  "req.empty": "⏳ Заявок на доступ нет.",
+  "btn.requests": "⏳ Заявки",
+
   // ---------- Excel export ----------
   "xls.sheetTransactions": "Операции",
   "xls.sheetPayments": "Платежи по кредитам",
@@ -514,6 +560,7 @@ export function allMenuLabels(): Set<string> {
     "btn.exportExcel",
     "btn.logs",
     "btn.users",
+    "btn.requests",
     "btn.language",
     "btn.cancel",
   ];
