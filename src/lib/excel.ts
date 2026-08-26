@@ -1,7 +1,9 @@
 import * as XLSX from "xlsx-js-style";
 import { endOfMonth, format, startOfMonth } from "date-fns";
+import { Locale } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/money";
+import { categoryLabel, t } from "@/lib/bot/i18n";
 
 const HEADER_STYLE = {
   font: { bold: true, color: { rgb: "FFFFFF" } },
@@ -42,8 +44,10 @@ function sheetFromRows(
  */
 export async function buildMonthlyWorkbook(
   year: number,
-  month: number
+  month: number,
+  locale: Locale = Locale.RU
 ): Promise<{ buffer: Buffer; filename: string }> {
+  const tr = (key: Parameters<typeof t>[1]) => t(locale, key);
   const from = startOfMonth(new Date(year, month - 1, 1));
   const to = endOfMonth(from);
 
@@ -70,39 +74,39 @@ export async function buildMonthlyWorkbook(
   // --- Transactions ---
   const txRows = transactions.map((tx) => [
     format(tx.date, "dd.MM.yyyy"),
-    tx.source === "CASH" ? "Cash" : "Bank",
-    tx.type === "INCOME" ? "Income" : "Expense",
+    tr(tx.source === "CASH" ? "common.cash" : "common.bank"),
+    tr(tx.type === "INCOME" ? "common.income" : "common.expense"),
     toNumber(tx.amount),
     tx.currency,
-    tx.category ?? "",
+    tx.category ? categoryLabel(locale, tx.category) : "",
     tx.bankName ?? "",
     tx.counterparty ?? "",
     tx.comment ?? "",
     tx.user.name,
-    tx.user.role,
+    tr(`role.${tx.user.role}`),
   ]);
 
   XLSX.utils.book_append_sheet(
     workbook,
     sheetFromRows(
       [
-        "Date",
-        "Source",
-        "Type",
-        "Amount",
-        "Currency",
-        "Category",
-        "Bank",
-        "Counterparty",
-        "Comment",
-        "Added by",
-        "Role",
+        tr("xls.date"),
+        tr("xls.source"),
+        tr("xls.type"),
+        tr("xls.amount"),
+        tr("xls.currency"),
+        tr("xls.category"),
+        tr("xls.bank"),
+        tr("xls.counterparty"),
+        tr("xls.comment"),
+        tr("xls.addedBy"),
+        tr("xls.role"),
       ],
       txRows,
       [3],
       [12, 10, 10, 16, 10, 18, 18, 22, 30, 18, 12]
     ),
-    "Transactions"
+    tr("xls.sheetTransactions")
   );
 
   // --- Credit instalments ---
@@ -111,19 +115,26 @@ export async function buildMonthlyWorkbook(
     format(payment.dueDate, "dd.MM.yyyy"),
     toNumber(payment.amount),
     payment.credit.currency,
-    payment.isPaid ? "Paid" : "Pending",
+    tr(payment.isPaid ? "xls.paid" : "xls.pending"),
     payment.paidDate ? format(payment.paidDate, "dd.MM.yyyy") : "",
   ]);
 
   XLSX.utils.book_append_sheet(
     workbook,
     sheetFromRows(
-      ["Bank", "Due date", "Amount", "Currency", "Status", "Paid on"],
+      [
+        tr("xls.bank"),
+        tr("xls.dueDate"),
+        tr("xls.amount"),
+        tr("xls.currency"),
+        tr("xls.status"),
+        tr("xls.paidOn"),
+      ],
       paymentRows,
       [2],
       [22, 14, 16, 10, 12, 14]
     ),
-    "Credit payments"
+    tr("xls.sheetPayments")
   );
 
   // --- Summary ---
@@ -158,19 +169,19 @@ export async function buildMonthlyWorkbook(
     workbook,
     sheetFromRows(
       [
-        "Currency",
-        "Cash income",
-        "Cash expense",
-        "Bank income",
-        "Bank expense",
-        "Credits paid",
-        "Net margin",
+        tr("xls.currency"),
+        tr("xls.cashIncome"),
+        tr("xls.cashExpense"),
+        tr("xls.bankIncome"),
+        tr("xls.bankExpense"),
+        tr("xls.creditsPaid"),
+        tr("xls.netMargin"),
       ],
       summaryRows,
       [1, 2, 3, 4, 5, 6],
       [10, 16, 16, 16, 16, 16, 18]
     ),
-    "Summary"
+    tr("xls.sheetSummary")
   );
 
   const buffer = XLSX.write(workbook, {

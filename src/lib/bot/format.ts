@@ -1,6 +1,7 @@
 import { format } from "date-fns";
-import type { Transaction } from "@prisma/client";
+import type { Locale, Transaction } from "@prisma/client";
 import { formatMoney, toNumber } from "@/lib/money";
+import { categoryLabel, t } from "./i18n";
 
 export const DATE_FMT = "dd.MM.yyyy";
 export const DATETIME_FMT = "dd.MM.yyyy HH:mm";
@@ -45,24 +46,35 @@ export function parseDate(input: string): Date | null {
 
 const SIGN = { INCOME: "➕", EXPENSE: "➖" } as const;
 
+function sourceLabel(locale: Locale, source: Transaction["source"]): string {
+  return t(locale, source === "CASH" ? "common.cash" : "common.bank");
+}
+
 /** One-line summary used in lists. */
-export function txLine(tx: Transaction): string {
+export function txLine(tx: Transaction, locale: Locale): string {
   const money = formatMoney(toNumber(tx.amount), tx.currency);
-  const label = tx.source === "CASH" ? "Cash" : "Bank";
-  return `${SIGN[tx.type]} ${money} · ${label} · ${fmtDate(tx.date)}`;
+  return `${SIGN[tx.type]} ${money} · ${sourceLabel(locale, tx.source)} · ${fmtDate(tx.date)}`;
 }
 
 /** Full card shown after saving or when opening an entry. */
-export function txCard(tx: Transaction): string {
+export function txCard(tx: Transaction, locale: Locale): string {
   const lines = [
     `${SIGN[tx.type]} <b>${formatMoney(toNumber(tx.amount), tx.currency)}</b>`,
-    `Source: ${tx.source === "CASH" ? "Cash" : "Bank"}`,
-    `Type: ${tx.type === "INCOME" ? "Income" : "Expense"}`,
-    `Date: ${fmtDate(tx.date)}`,
+    t(locale, "tx.source", { source: sourceLabel(locale, tx.source) }),
+    t(locale, "tx.type", {
+      type: t(locale, tx.type === "INCOME" ? "common.income" : "common.expense"),
+    }),
+    t(locale, "tx.date", { date: fmtDate(tx.date) }),
   ];
-  if (tx.category) lines.push(`Category: ${esc(tx.category)}`);
-  if (tx.bankName) lines.push(`Bank: ${esc(tx.bankName)}`);
-  if (tx.counterparty) lines.push(`Counterparty: ${esc(tx.counterparty)}`);
-  if (tx.comment) lines.push(`Comment: ${esc(tx.comment)}`);
+  if (tx.category) {
+    lines.push(
+      t(locale, "tx.category", { category: esc(categoryLabel(locale, tx.category)) })
+    );
+  }
+  if (tx.bankName) lines.push(t(locale, "tx.bank", { bank: esc(tx.bankName) }));
+  if (tx.counterparty) {
+    lines.push(t(locale, "tx.counterparty", { counterparty: esc(tx.counterparty) }));
+  }
+  if (tx.comment) lines.push(t(locale, "tx.comment", { comment: esc(tx.comment) }));
   return lines.join("\n");
 }

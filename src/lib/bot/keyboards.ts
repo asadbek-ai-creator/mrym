@@ -1,91 +1,87 @@
 import { InlineKeyboard, Keyboard } from "grammy";
-import { Role, TxType } from "@prisma/client";
+import { Locale, Role, TxType } from "@prisma/client";
 import { can } from "./auth";
+import {
+  CASH_CATEGORIES,
+  LOCALES,
+  LOCALE_LABEL,
+  categoryLabel,
+  labels,
+  t,
+} from "./i18n";
 
-// ---------- Button labels (also used to match incoming reply-keyboard text) ----------
+export { CASH_CATEGORIES, labels };
 
-export const BTN = {
-  cashIncome: "📥 Cash Income",
-  cashExpense: "📤 Cash Expense",
-  bankIncome: "🏦 Bank Income",
-  bankExpense: "🏦 Bank Expense",
-  addCredit: "💳 Add Credit",
-  credits: "📋 Credits",
-  myEntries: "📝 My Entries",
-  balance: "📊 Balance",
-  exportExcel: "📁 Export Excel",
-  logs: "🧾 Logs",
-  users: "👥 Users",
-  cancel: "❌ Cancel",
-} as const;
+/**
+ * Menu labels are rendered in the user's language but matched in every
+ * language, because a keyboard already on screen keeps its old labels after
+ * a language switch.
+ */
+export function mainMenu(role: Role, locale: Locale): Keyboard {
+  const label = (key: Parameters<typeof t>[1]) => t(locale, key);
 
-export function mainMenu(role: Role): Keyboard {
-  const kb = new Keyboard().text(BTN.cashIncome).text(BTN.cashExpense).row();
+  const kb = new Keyboard()
+    .text(label("btn.cashIncome"))
+    .text(label("btn.cashExpense"))
+    .row();
 
   if (can(role, "BANK")) {
-    kb.text(BTN.bankIncome).text(BTN.bankExpense).row();
+    kb.text(label("btn.bankIncome")).text(label("btn.bankExpense")).row();
   }
   if (can(role, "CREDIT")) {
-    kb.text(BTN.addCredit).text(BTN.credits).row();
+    kb.text(label("btn.addCredit")).text(label("btn.credits")).row();
   }
 
-  kb.text(BTN.myEntries).text(BTN.balance).row();
-  kb.text(BTN.exportExcel);
+  kb.text(label("btn.myEntries")).text(label("btn.balance")).row();
+  kb.text(label("btn.exportExcel")).text(label("btn.language"));
 
   if (can(role, "ADMIN")) {
-    kb.row().text(BTN.logs).text(BTN.users);
+    kb.row().text(label("btn.logs")).text(label("btn.users"));
   }
 
   return kb.resized().persistent();
 }
 
 /** Shown while a wizard is running so the user always has a way out. */
-export function cancelMenu(): Keyboard {
-  return new Keyboard().text(BTN.cancel).resized();
+export function cancelMenu(locale: Locale): Keyboard {
+  return new Keyboard().text(t(locale, "btn.cancel")).resized();
 }
 
 // ---------- Cash categories ----------
 
-export const CASH_CATEGORIES: Record<TxType, string[]> = {
-  INCOME: ["Sales", "Advance", "Debt repayment", "Investment", "Other"],
-  EXPENSE: [
-    "Supplies",
-    "Salary",
-    "Rent",
-    "Utilities",
-    "Transport",
-    "Taxes",
-    "Other",
-  ],
-};
-
-export function categoryKeyboard(type: TxType): InlineKeyboard {
+export function categoryKeyboard(type: TxType, locale: Locale): InlineKeyboard {
   const kb = new InlineKeyboard();
   CASH_CATEGORIES[type].forEach((category, index) => {
-    kb.text(category, `cat:${index}`);
+    kb.text(categoryLabel(locale, category), `cat:${index}`);
     if (index % 2 === 1) kb.row();
   });
   return kb;
 }
 
-/** Resolves a `cat:<index>` callback back to the category name. */
+/** Resolves a `cat:<index>` callback back to the stored category name. */
 export function categoryFromIndex(type: TxType, index: number): string | null {
   return CASH_CATEGORIES[type][index] ?? null;
 }
 
 // ---------- Small shared keyboards ----------
 
-export const skipKeyboard = (data: string) =>
-  new InlineKeyboard().text("⏭ Skip", data);
+export const skipKeyboard = (data: string, locale: Locale) =>
+  new InlineKeyboard().text(t(locale, "btn.skip"), data);
 
-export function dateKeyboard(): InlineKeyboard {
+export function dateKeyboard(locale: Locale): InlineKeyboard {
   return new InlineKeyboard()
-    .text("📅 Today", "date:today")
-    .text("📅 Yesterday", "date:yesterday")
+    .text(t(locale, "bank.today"), "date:today")
+    .text(t(locale, "bank.yesterday"), "date:yesterday")
     .row()
-    .text("✏️ Enter a date", "date:manual");
+    .text(t(locale, "bank.manualDate"), "date:manual");
 }
 
-export function confirmKeyboard(yes: string, no: string): InlineKeyboard {
-  return new InlineKeyboard().text("✅ Yes", yes).text("↩️ No", no);
+export function languageKeyboard(): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  // One language per row, without leaving a trailing empty row behind.
+  LOCALES.forEach((locale, index) => {
+    if (index > 0) kb.row();
+    kb.text(LOCALE_LABEL[locale], `lang:${locale}`);
+  });
+  return kb;
 }

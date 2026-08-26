@@ -1,7 +1,8 @@
-import { Role } from "@prisma/client";
+import { Locale, Role } from "@prisma/client";
 import type { MiddlewareFn } from "grammy";
 import { prisma } from "@/lib/prisma";
 import { bootstrapAdminIds } from "@/lib/env";
+import { t, translator } from "./i18n";
 import type { BotContext } from "./types";
 
 /** Modules of the system, used for permission checks. */
@@ -43,30 +44,41 @@ export const authMiddleware: MiddlewareFn<BotContext> = async (ctx, next) => {
 
   if (!user && bootstrapAdminIds().includes(telegramId)) {
     user = await prisma.user.create({
-      data: { telegramId, name: displayName, role: Role.ADMIN },
+      data: {
+        telegramId,
+        name: displayName,
+        role: Role.ADMIN,
+        language: guessLocale(from.language_code),
+      },
     });
   }
 
   if (!user) {
-    await ctx.reply(
-      "⛔️ Access denied.\n\n" +
-        `Your Telegram ID is <code>${from.id}</code>.\n` +
-        "Send it to the administrator to get registered.",
-      { parse_mode: "HTML" }
-    );
+    // No stored preference yet, so fall back to the Telegram client's own
+    // language for the one message this person is allowed to see.
+    await ctx.reply(t(guessLocale(from.language_code), "auth.denied", { id: from.id }), {
+      parse_mode: "HTML",
+    });
     return;
   }
 
   ctx.user = user;
   ctx.role = user.role;
+  ctx.locale = user.language;
+  ctx.t = translator(user.language);
   await next();
 };
+
+/** Maps a Telegram `language_code` onto a language the bot actually speaks. */
+export function guessLocale(code: string | undefined): Locale {
+  return code?.toLowerCase().startsWith("en") ? Locale.EN : Locale.RU;
+}
 
 /** Guards a set of handlers behind a module permission. */
 export function requireModule(module: Module): MiddlewareFn<BotContext> {
   return async (ctx, next) => {
     if (!can(ctx.role, module)) {
-      const text = "⛔️ You do not have access to this section.";
+      const text = ctx.t("common.noAccess");
       if (ctx.callbackQuery) await ctx.answerCallbackQuery({ text, show_alert: true });
       else await ctx.reply(text);
       return;

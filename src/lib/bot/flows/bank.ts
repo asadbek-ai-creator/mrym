@@ -4,7 +4,8 @@ import { subDays } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { formatMoney, parseAmount } from "@/lib/money";
 import { logAction, requireModule } from "../auth";
-import { BTN, cancelMenu, dateKeyboard, skipKeyboard } from "../keyboards";
+import { cancelMenu, dateKeyboard, skipKeyboard } from "../keyboards";
+import { labels } from "../i18n";
 import { clearInlineKeyboard, onStep, replySaved } from "../helpers";
 import { fmtDate, parseDate } from "../format";
 import type { BotContext } from "../types";
@@ -18,18 +19,16 @@ export const bankFlow = new Composer<BotContext>();
 async function start(ctx: BotContext, type: TxType) {
   ctx.session.step = "bank:amount";
   ctx.session.draft = { type };
-  const label = type === TxType.INCOME ? "income" : "expense";
   await ctx.reply(
-    `🏦 <b>Bank ${label}</b>\n\nEnter the amount.\n` +
-      "<i>Examples: 12 000 000 · 4500.50 · 300 USD</i>",
-    { parse_mode: "HTML", reply_markup: cancelMenu() }
+    `${ctx.t(`bank.title.${type}`)}\n\n${ctx.t("bank.askAmount")}`,
+    { parse_mode: "HTML", reply_markup: cancelMenu(ctx.locale) }
   );
 }
 
-bankFlow.hears(BTN.bankIncome, requireModule("BANK"), (ctx) =>
+bankFlow.hears(labels("btn.bankIncome"), requireModule("BANK"), (ctx) =>
   start(ctx, TxType.INCOME)
 );
-bankFlow.hears(BTN.bankExpense, requireModule("BANK"), (ctx) =>
+bankFlow.hears(labels("btn.bankExpense"), requireModule("BANK"), (ctx) =>
   start(ctx, TxType.EXPENSE)
 );
 
@@ -37,7 +36,7 @@ bankFlow.hears(BTN.bankExpense, requireModule("BANK"), (ctx) =>
 onStep(bankFlow, "bank:amount", async (ctx) => {
   const parsed = parseAmount(ctx.message!.text!);
   if (!parsed) {
-    await ctx.reply("⚠️ I could not read that amount. Try again, e.g. 12000000");
+    await ctx.reply(ctx.t("common.badAmount", { example: "12000000" }));
     return;
   }
 
@@ -46,8 +45,10 @@ onStep(bankFlow, "bank:amount", async (ctx) => {
   ctx.session.step = "bank:date";
 
   await ctx.reply(
-    `Amount: <b>${formatMoney(parsed.amount, parsed.currency)}</b>\n\nChoose the transaction date:`,
-    { parse_mode: "HTML", reply_markup: dateKeyboard() }
+    ctx.t("bank.askDate", {
+      amount: formatMoney(parsed.amount, parsed.currency),
+    }),
+    { parse_mode: "HTML", reply_markup: dateKeyboard(ctx.locale) }
   );
 });
 
@@ -55,10 +56,10 @@ onStep(bankFlow, "bank:amount", async (ctx) => {
 async function askBankName(ctx: BotContext, date: Date) {
   ctx.session.draft.date = date.toISOString();
   ctx.session.step = "bank:name";
-  await ctx.reply(
-    `Date: <b>${fmtDate(date)}</b>\n\nEnter the bank name:`,
-    { parse_mode: "HTML", reply_markup: cancelMenu() }
-  );
+  await ctx.reply(ctx.t("bank.askName", { date: fmtDate(date) }), {
+    parse_mode: "HTML",
+    reply_markup: cancelMenu(ctx.locale),
+  });
 }
 
 bankFlow.callbackQuery(
@@ -66,7 +67,7 @@ bankFlow.callbackQuery(
   requireModule("BANK"),
   async (ctx) => {
     if (ctx.session.step !== "bank:date") {
-      await ctx.answerCallbackQuery("This step is no longer active.");
+      await ctx.answerCallbackQuery(ctx.t("common.stepExpired"));
       return;
     }
 
@@ -76,9 +77,9 @@ bankFlow.callbackQuery(
 
     if (choice === "manual") {
       ctx.session.step = "bank:date_manual";
-      await ctx.reply("Enter the date as <b>dd.mm.yyyy</b> (e.g. 05.03.2026):", {
+      await ctx.reply(ctx.t("bank.askManualDate"), {
         parse_mode: "HTML",
-        reply_markup: cancelMenu(),
+        reply_markup: cancelMenu(ctx.locale),
       });
       return;
     }
@@ -91,7 +92,7 @@ bankFlow.callbackQuery(
 onStep(bankFlow, "bank:date_manual", async (ctx) => {
   const date = parseDate(ctx.message!.text!);
   if (!date) {
-    await ctx.reply("⚠️ Invalid date. Use the format dd.mm.yyyy, e.g. 05.03.2026");
+    await ctx.reply(ctx.t("bank.badDate"));
     return;
   }
   await askBankName(ctx, date);
@@ -101,8 +102,8 @@ onStep(bankFlow, "bank:date_manual", async (ctx) => {
 onStep(bankFlow, "bank:name", async (ctx) => {
   ctx.session.draft.bankName = ctx.message!.text!.trim();
   ctx.session.step = "bank:party";
-  await ctx.reply("Enter the counterparty (who paid / who was paid):", {
-    reply_markup: cancelMenu(),
+  await ctx.reply(ctx.t("bank.askParty"), {
+    reply_markup: cancelMenu(ctx.locale),
   });
 });
 
@@ -110,7 +111,9 @@ onStep(bankFlow, "bank:name", async (ctx) => {
 onStep(bankFlow, "bank:party", async (ctx) => {
   ctx.session.draft.counterparty = ctx.message!.text!.trim();
   ctx.session.step = "bank:comment";
-  await ctx.reply("Add a comment:", { reply_markup: skipKeyboard("bank:skip") });
+  await ctx.reply(ctx.t("common.addComment"), {
+    reply_markup: skipKeyboard("bank:skip", ctx.locale),
+  });
 });
 
 // --- Step 5: comment, then save ---
@@ -142,10 +145,10 @@ onStep(bankFlow, "bank:comment", (ctx) => save(ctx, ctx.message!.text!.trim()));
 
 bankFlow.callbackQuery("bank:skip", requireModule("BANK"), async (ctx) => {
   if (ctx.session.step !== "bank:comment") {
-    await ctx.answerCallbackQuery("This step is no longer active.");
+    await ctx.answerCallbackQuery(ctx.t("common.stepExpired"));
     return;
   }
-  await ctx.answerCallbackQuery("Skipped");
+  await ctx.answerCallbackQuery(ctx.t("common.skipped"));
   await clearInlineKeyboard(ctx);
   await save(ctx, null);
 });

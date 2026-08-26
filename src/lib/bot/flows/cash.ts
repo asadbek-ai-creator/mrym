@@ -4,12 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { parseAmount, formatMoney } from "@/lib/money";
 import { logAction, requireModule } from "../auth";
 import {
-  BTN,
   cancelMenu,
   categoryFromIndex,
   categoryKeyboard,
   skipKeyboard,
 } from "../keyboards";
+import { categoryLabel, labels } from "../i18n";
 import { clearInlineKeyboard, onStep, replySaved } from "../helpers";
 import type { BotContext } from "../types";
 
@@ -22,18 +22,16 @@ export const cashFlow = new Composer<BotContext>();
 async function start(ctx: BotContext, type: TxType) {
   ctx.session.step = "cash:amount";
   ctx.session.draft = { type };
-  const label = type === TxType.INCOME ? "income" : "expense";
   await ctx.reply(
-    `💵 <b>Cash ${label}</b>\n\nEnter the amount.\n` +
-      "<i>Examples: 1 500 000 · 250000 · 300 USD</i>",
-    { parse_mode: "HTML", reply_markup: cancelMenu() }
+    `${ctx.t(`cash.title.${type}`)}\n\n${ctx.t("cash.askAmount")}`,
+    { parse_mode: "HTML", reply_markup: cancelMenu(ctx.locale) }
   );
 }
 
-cashFlow.hears(BTN.cashIncome, requireModule("CASH"), (ctx) =>
+cashFlow.hears(labels("btn.cashIncome"), requireModule("CASH"), (ctx) =>
   start(ctx, TxType.INCOME)
 );
-cashFlow.hears(BTN.cashExpense, requireModule("CASH"), (ctx) =>
+cashFlow.hears(labels("btn.cashExpense"), requireModule("CASH"), (ctx) =>
   start(ctx, TxType.EXPENSE)
 );
 
@@ -41,7 +39,7 @@ cashFlow.hears(BTN.cashExpense, requireModule("CASH"), (ctx) =>
 onStep(cashFlow, "cash:amount", async (ctx) => {
   const parsed = parseAmount(ctx.message!.text!);
   if (!parsed) {
-    await ctx.reply("⚠️ I could not read that amount. Try again, e.g. 250000");
+    await ctx.reply(ctx.t("common.badAmount", { example: "250000" }));
     return;
   }
 
@@ -51,33 +49,36 @@ onStep(cashFlow, "cash:amount", async (ctx) => {
 
   const type = ctx.session.draft.type as TxType;
   await ctx.reply(
-    `Amount: <b>${formatMoney(parsed.amount, parsed.currency)}</b>\n\nChoose a category:`,
-    { parse_mode: "HTML", reply_markup: categoryKeyboard(type) }
+    ctx.t("cash.askCategory", {
+      amount: formatMoney(parsed.amount, parsed.currency),
+    }),
+    { parse_mode: "HTML", reply_markup: categoryKeyboard(type, ctx.locale) }
   );
 });
 
 // --- Step 2: category ---
 cashFlow.callbackQuery(/^cat:(\d+)$/, requireModule("CASH"), async (ctx) => {
   if (ctx.session.step !== "cash:category") {
-    await ctx.answerCallbackQuery("This step is no longer active.");
+    await ctx.answerCallbackQuery(ctx.t("common.stepExpired"));
     return;
   }
 
   const type = ctx.session.draft.type as TxType;
   const category = categoryFromIndex(type, Number(ctx.match![1]));
   if (!category) {
-    await ctx.answerCallbackQuery("Unknown category.");
+    await ctx.answerCallbackQuery(ctx.t("cash.unknownCategory"));
     return;
   }
 
   ctx.session.draft.category = category;
   ctx.session.step = "cash:comment";
 
-  await ctx.answerCallbackQuery(category);
+  const shown = categoryLabel(ctx.locale, category);
+  await ctx.answerCallbackQuery(shown);
   await clearInlineKeyboard(ctx);
-  await ctx.reply(`Category: <b>${category}</b>\n\nAdd a comment:`, {
+  await ctx.reply(ctx.t("cash.categoryChosen", { category: shown }), {
     parse_mode: "HTML",
-    reply_markup: skipKeyboard("cash:skip"),
+    reply_markup: skipKeyboard("cash:skip", ctx.locale),
   });
 });
 
@@ -108,10 +109,10 @@ onStep(cashFlow, "cash:comment", (ctx) => save(ctx, ctx.message!.text!.trim()));
 
 cashFlow.callbackQuery("cash:skip", requireModule("CASH"), async (ctx) => {
   if (ctx.session.step !== "cash:comment") {
-    await ctx.answerCallbackQuery("This step is no longer active.");
+    await ctx.answerCallbackQuery(ctx.t("common.stepExpired"));
     return;
   }
-  await ctx.answerCallbackQuery("Skipped");
+  await ctx.answerCallbackQuery(ctx.t("common.skipped"));
   await clearInlineKeyboard(ctx);
   await save(ctx, null);
 });

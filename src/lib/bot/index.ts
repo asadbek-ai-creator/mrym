@@ -1,9 +1,12 @@
 import { Bot, GrammyError, HttpError, session } from "grammy";
+import { Locale } from "@prisma/client";
 import { botToken } from "@/lib/env";
+import { prisma } from "@/lib/prisma";
 import { authMiddleware, can, logAction } from "./auth";
 import { prismaSessionStorage } from "./storage";
 import { initialSession, type BotContext, type SessionData } from "./types";
-import { BTN, mainMenu } from "./keyboards";
+import { languageKeyboard, mainMenu } from "./keyboards";
+import { allMenuLabels, labels, roleLabel, translator } from "./i18n";
 import { resetSession } from "./helpers";
 import { cashFlow } from "./flows/cash";
 import { bankFlow } from "./flows/bank";
@@ -12,7 +15,7 @@ import { entriesFlow } from "./flows/entries";
 import { reportsFlow } from "./flows/reports";
 import { adminFlow } from "./flows/admin";
 
-const MENU_LABELS = new Set<string>(Object.values(BTN));
+const MENU_LABELS = allMenuLabels();
 
 function createBot(): Bot<BotContext> {
   const bot = new Bot<BotContext>(botToken(), {
@@ -29,7 +32,8 @@ function createBot(): Bot<BotContext> {
     })
   );
 
-  // 2. Everything past this point requires a registered user.
+  // 2. Everything past this point requires a registered user, and carries
+  //    that user's language on the context.
   bot.use(authMiddleware);
 
   // 3. Pressing a menu button or sending a command always abandons the
@@ -44,40 +48,71 @@ function createBot(): Bot<BotContext> {
 
   // 4. Commands.
   bot.command("start", async (ctx) => {
-    const sections = ["💵 Cash"];
-    if (can(ctx.role, "BANK")) sections.push("🏦 Bank");
-    if (can(ctx.role, "CREDIT")) sections.push("💳 Credits");
-    if (can(ctx.role, "ADMIN")) sections.push("🧾 Logs and users");
+    const sections = [ctx.t("start.section.cash")];
+    if (can(ctx.role, "BANK")) sections.push(ctx.t("start.section.bank"));
+    if (can(ctx.role, "CREDIT")) sections.push(ctx.t("start.section.credits"));
+    if (can(ctx.role, "ADMIN")) sections.push(ctx.t("start.section.admin"));
 
     await logAction(ctx.user.id, "BOT_START");
     await ctx.reply(
-      `👋 Hello, <b>${ctx.user.name}</b>!\n\n` +
-        `Your role: <b>${ctx.role}</b>\n` +
-        `Available sections: ${sections.join(", ")}\n\n` +
-        "Choose an action from the menu below.",
-      { parse_mode: "HTML", reply_markup: mainMenu(ctx.role) }
+      ctx.t("start.greeting", {
+        name: ctx.user.name,
+        role: roleLabel(ctx.locale, ctx.role),
+        sections: sections.join(", "),
+      }),
+      { parse_mode: "HTML", reply_markup: mainMenu(ctx.role, ctx.locale) }
     );
   });
 
   bot.command("menu", (ctx) =>
-    ctx.reply("Menu:", { reply_markup: mainMenu(ctx.role) })
-  );
-
-  bot.command("id", (ctx) =>
-    ctx.reply(`Your Telegram ID: <code>${ctx.from!.id}</code>`, {
-      parse_mode: "HTML",
+    ctx.reply(ctx.t("common.menu"), {
+      reply_markup: mainMenu(ctx.role, ctx.locale),
     })
   );
 
+  bot.command("id", (ctx) =>
+    ctx.reply(ctx.t("auth.yourId", { id: ctx.from!.id }), { parse_mode: "HTML" })
+  );
+
   bot.command("cancel", (ctx) =>
-    ctx.reply("Cancelled.", { reply_markup: mainMenu(ctx.role) })
+    ctx.reply(ctx.t("common.cancelled"), {
+      reply_markup: mainMenu(ctx.role, ctx.locale),
+    })
   );
 
-  bot.hears(BTN.cancel, (ctx) =>
-    ctx.reply("Cancelled.", { reply_markup: mainMenu(ctx.role) })
+  bot.hears(labels("btn.cancel"), (ctx) =>
+    ctx.reply(ctx.t("common.cancelled"), {
+      reply_markup: mainMenu(ctx.role, ctx.locale),
+    })
   );
 
-  // 5. Feature flows. Each one owns its entry buttons, wizard steps and
+  // 5. Language switching. The reply keyboard is rebuilt afterwards so the
+  //    buttons on screen match the language that was just chosen.
+  const askLanguage = (ctx: BotContext) =>
+    ctx.reply(ctx.t("lang.choose"), { reply_markup: languageKeyboard() });
+
+  bot.command("language", askLanguage);
+  bot.hears(labels("btn.language"), askLanguage);
+
+  bot.callbackQuery(/^lang:(RU|EN)$/, async (ctx) => {
+    const locale = ctx.match![1] as Locale;
+
+    await prisma.user.update({
+      where: { id: ctx.user.id },
+      data: { language: locale },
+    });
+    ctx.locale = locale;
+    ctx.t = translator(locale);
+
+    await logAction(ctx.user.id, "LANGUAGE_CHANGED", locale);
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => undefined);
+    await ctx.reply(ctx.t("lang.changed"), {
+      reply_markup: mainMenu(ctx.role, locale),
+    });
+  });
+
+  // 6. Feature flows. Each one owns its entry buttons, wizard steps and
   //    callback prefixes, and lets anything it does not recognise pass through.
   bot.use(cashFlow);
   bot.use(bankFlow);
@@ -86,15 +121,15 @@ function createBot(): Bot<BotContext> {
   bot.use(reportsFlow);
   bot.use(adminFlow);
 
-  // 6. Anything unrecognised.
+  // 7. Anything unrecognised.
   bot.on("message", (ctx) =>
-    ctx.reply("Please choose an action from the menu.", {
-      reply_markup: mainMenu(ctx.role),
+    ctx.reply(ctx.t("common.chooseFromMenu"), {
+      reply_markup: mainMenu(ctx.role, ctx.locale),
     })
   );
 
   bot.on("callback_query", (ctx) =>
-    ctx.answerCallbackQuery("This button is no longer active.")
+    ctx.answerCallbackQuery(ctx.t("common.buttonExpired"))
   );
 
   bot.catch(async ({ ctx, error }) => {
@@ -109,9 +144,9 @@ function createBot(): Bot<BotContext> {
 
     console.error("[bot] update failed", ctx.update.update_id, description);
 
-    await ctx
-      .reply("⚠️ Something went wrong. Please try again or press /start.")
-      .catch(() => undefined);
+    // `ctx.t` is missing when the failure happened before auth ran.
+    const text = ctx.t?.("common.error") ?? "⚠️ Error. Press /start.";
+    await ctx.reply(text).catch(() => undefined);
   });
 
   return bot;

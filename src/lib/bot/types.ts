@@ -1,5 +1,6 @@
 import type { Context, SessionFlavor } from "grammy";
-import type { Role, User } from "@prisma/client";
+import type { Locale, Role, User } from "@prisma/client";
+import type { Translate } from "./i18n";
 
 /**
  * The wizard state. Because the bot runs on serverless webhooks there is no
@@ -19,6 +20,10 @@ export function initialSession(): SessionData {
 export interface AuthFlavor {
   user: User;
   role: Role;
+  /** The user's chosen interface language. */
+  locale: Locale;
+  /** Translator bound to `locale`; every user-facing string goes through it. */
+  t: Translate;
 }
 
 export type BotContext = Context & SessionFlavor<SessionData> & AuthFlavor;

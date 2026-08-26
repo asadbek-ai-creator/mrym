@@ -3,8 +3,9 @@ import { Role, type Transaction } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { formatMoney, parseAmount, toNumber } from "@/lib/money";
 import { EDIT_WINDOW_MS, logAction, withinEditWindow } from "../auth";
-import { BTN, cancelMenu } from "../keyboards";
-import { entryActions, finish, onStep } from "../helpers";
+import { cancelMenu } from "../keyboards";
+import { labels } from "../i18n";
+import { entryActions, finish, onePerRow, onStep } from "../helpers";
 import { txCard, txLine } from "../format";
 import type { BotContext } from "../types";
 
@@ -23,18 +24,19 @@ type Permission = { allowed: true; tx: Transaction } | { allowed: false; reason:
 
 async function checkEditable(ctx: BotContext, txId: string): Promise<Permission> {
   const tx = await prisma.transaction.findUnique({ where: { id: txId } });
-  if (!tx) return { allowed: false, reason: "Entry not found." };
+  if (!tx) return { allowed: false, reason: ctx.t("entry.notFound") };
 
   if (ctx.role === Role.ADMIN) return { allowed: true, tx };
 
   if (tx.userId !== ctx.user.id) {
-    return { allowed: false, reason: "You can only edit your own entries." };
+    return { allowed: false, reason: ctx.t("entry.onlyOwn") };
   }
   if (!withinEditWindow(tx.createdAt)) {
-    const minutes = Math.round(EDIT_WINDOW_MS / 60000);
     return {
       allowed: false,
-      reason: `The ${minutes}-minute editing window has closed. Ask an administrator.`,
+      reason: ctx.t("entry.windowClosed", {
+        minutes: Math.round(EDIT_WINDOW_MS / 60000),
+      }),
     };
   }
   return { allowed: true, tx };
@@ -42,7 +44,7 @@ async function checkEditable(ctx: BotContext, txId: string): Promise<Permission>
 
 // ---------- Listing ----------
 
-entriesFlow.hears(BTN.myEntries, async (ctx) => {
+entriesFlow.hears(labels("btn.myEntries"), async (ctx) => {
   const entries = await prisma.transaction.findMany({
     where: { userId: ctx.user.id },
     orderBy: { createdAt: "desc" },
@@ -50,31 +52,32 @@ entriesFlow.hears(BTN.myEntries, async (ctx) => {
   });
 
   if (entries.length === 0) {
-    await ctx.reply("You have not added any entries yet.");
+    await ctx.reply(ctx.t("entry.none"));
     return;
   }
 
   const kb = new InlineKeyboard();
+  const addRow = onePerRow(kb);
   for (const tx of entries) {
-    kb.text(txLine(tx), `txopen:${tx.id}`).row();
+    addRow(txLine(tx, ctx.locale), `txopen:${tx.id}`);
   }
 
-  await ctx.reply(
-    `📝 <b>Your last ${entries.length} entries</b>\n\nTap one to view or correct it:`,
-    { parse_mode: "HTML", reply_markup: kb }
-  );
+  await ctx.reply(ctx.t("entry.list", { count: entries.length }), {
+    parse_mode: "HTML",
+    reply_markup: kb,
+  });
 });
 
 entriesFlow.callbackQuery(/^txopen:(.+)$/, async (ctx) => {
   const tx = await prisma.transaction.findUnique({ where: { id: ctx.match![1] } });
   if (!tx) {
-    await ctx.answerCallbackQuery("Entry not found.");
+    await ctx.answerCallbackQuery(ctx.t("entry.notFound"));
     return;
   }
   await ctx.answerCallbackQuery();
-  await ctx.reply(txCard(tx), {
+  await ctx.reply(txCard(tx, ctx.locale), {
     parse_mode: "HTML",
-    reply_markup: entryActions(tx),
+    reply_markup: entryActions(tx, ctx),
   });
 });
 
@@ -91,16 +94,17 @@ entriesFlow.callbackQuery(/^txamt:(.+)$/, async (ctx) => {
   ctx.session.draft = { txId: check.tx.id };
   await ctx.answerCallbackQuery();
   await ctx.reply(
-    `Current amount: <b>${formatMoney(toNumber(check.tx.amount), check.tx.currency)}</b>\n\n` +
-      "Enter the new amount:",
-    { parse_mode: "HTML", reply_markup: cancelMenu() }
+    ctx.t("entry.askAmount", {
+      amount: formatMoney(toNumber(check.tx.amount), check.tx.currency),
+    }),
+    { parse_mode: "HTML", reply_markup: cancelMenu(ctx.locale) }
   );
 });
 
 onStep(entriesFlow, "edit:amount", async (ctx) => {
   const parsed = parseAmount(ctx.message!.text!);
   if (!parsed) {
-    await ctx.reply("⚠️ I could not read that amount. Try again, e.g. 250000");
+    await ctx.reply(ctx.t("common.badAmount", { example: "250000" }));
     return;
   }
 
@@ -122,7 +126,7 @@ onStep(entriesFlow, "edit:amount", async (ctx) => {
     "TRANSACTION_AMOUNT_EDITED",
     `${before} → ${formatMoney(parsed.amount, parsed.currency)}`
   );
-  await finish(ctx, `✅ Amount updated.\n\n${txCard(tx)}`);
+  await finish(ctx, `${ctx.t("entry.amountUpdated")}\n\n${txCard(tx, ctx.locale)}`);
 });
 
 entriesFlow.callbackQuery(/^txcom:(.+)$/, async (ctx) => {
@@ -135,7 +139,9 @@ entriesFlow.callbackQuery(/^txcom:(.+)$/, async (ctx) => {
   ctx.session.step = "edit:comment";
   ctx.session.draft = { txId: check.tx.id };
   await ctx.answerCallbackQuery();
-  await ctx.reply("Enter the new comment:", { reply_markup: cancelMenu() });
+  await ctx.reply(ctx.t("entry.askComment"), {
+    reply_markup: cancelMenu(ctx.locale),
+  });
 });
 
 onStep(entriesFlow, "edit:comment", async (ctx) => {
@@ -152,7 +158,7 @@ onStep(entriesFlow, "edit:comment", async (ctx) => {
   });
 
   await logAction(ctx.user.id, "TRANSACTION_COMMENT_EDITED", tx.comment ?? "");
-  await finish(ctx, `✅ Comment updated.\n\n${txCard(tx)}`);
+  await finish(ctx, `${ctx.t("entry.commentUpdated")}\n\n${txCard(tx, ctx.locale)}`);
 });
 
 // ---------- Deleting ----------
@@ -164,16 +170,19 @@ entriesFlow.callbackQuery(/^txdel:(.+)$/, async (ctx) => {
     return;
   }
   await ctx.answerCallbackQuery();
-  await ctx.reply(`Delete this entry?\n\n${txCard(check.tx)}`, {
-    parse_mode: "HTML",
-    reply_markup: new InlineKeyboard()
-      .text("🗑 Yes, delete", `txdelyes:${check.tx.id}`)
-      .text("↩️ Cancel", "txdelno"),
-  });
+  await ctx.reply(
+    `${ctx.t("entry.confirmDelete")}\n\n${txCard(check.tx, ctx.locale)}`,
+    {
+      parse_mode: "HTML",
+      reply_markup: new InlineKeyboard()
+        .text(ctx.t("entry.deleteYes"), `txdelyes:${check.tx.id}`)
+        .text(ctx.t("entry.deleteNo"), "txdelno"),
+    }
+  );
 });
 
 entriesFlow.callbackQuery("txdelno", async (ctx) => {
-  await ctx.answerCallbackQuery("Cancelled");
+  await ctx.answerCallbackQuery(ctx.t("common.cancelled"));
   await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => undefined);
 });
 
@@ -191,6 +200,6 @@ entriesFlow.callbackQuery(/^txdelyes:(.+)$/, async (ctx) => {
     `${check.tx.source} ${check.tx.type} · ${formatMoney(toNumber(check.tx.amount), check.tx.currency)}`
   );
 
-  await ctx.answerCallbackQuery("🗑 Deleted");
-  await ctx.editMessageText("🗑 Entry deleted.").catch(() => undefined);
+  await ctx.answerCallbackQuery(ctx.t("entry.deleted"));
+  await ctx.editMessageText(ctx.t("entry.deletedFull")).catch(() => undefined);
 });

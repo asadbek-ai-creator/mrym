@@ -38,6 +38,12 @@ enum CreditStatus {
   CLOSED
 }
 
+// Interface language of the Telegram bot, chosen per user.
+enum Locale {
+  RU
+  EN
+}
+
 // ---------- Models ----------
 
 model User {
@@ -45,6 +51,7 @@ model User {
   telegramId   BigInt        @unique
   name         String
   role         Role          @default(CASHIER)
+  language     Locale        @default(RU)
   createdAt    DateTime      @default(now())
 
   transactions Transaction[]

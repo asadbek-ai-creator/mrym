@@ -4,8 +4,9 @@ import { addMonths } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { formatMoney, parseAmount, toNumber } from "@/lib/money";
 import { logAction, requireModule } from "../auth";
-import { BTN, cancelMenu, mainMenu } from "../keyboards";
-import { onStep, resetSession } from "../helpers";
+import { cancelMenu, mainMenu } from "../keyboards";
+import { labels } from "../i18n";
+import { onePerRow, onStep, resetSession } from "../helpers";
 import { esc, fmtDate } from "../format";
 import type { BotContext } from "../types";
 
@@ -36,41 +37,44 @@ export function buildSchedule(total: number, months: number, from: Date) {
 
 // ---------- Creating a credit ----------
 
-creditFlow.hears(BTN.addCredit, requireModule("CREDIT"), async (ctx) => {
+creditFlow.hears(labels("btn.addCredit"), requireModule("CREDIT"), async (ctx) => {
   ctx.session.step = "credit:bank";
   ctx.session.draft = {};
-  await ctx.reply("💳 <b>New credit</b>\n\nEnter the bank name:", {
+  await ctx.reply(ctx.t("credit.new"), {
     parse_mode: "HTML",
-    reply_markup: cancelMenu(),
+    reply_markup: cancelMenu(ctx.locale),
   });
 });
 
 onStep(creditFlow, "credit:bank", async (ctx) => {
   ctx.session.draft.bankName = ctx.message!.text!.trim();
   ctx.session.step = "credit:amount";
-  await ctx.reply("Enter the total credit amount:", { reply_markup: cancelMenu() });
+  await ctx.reply(ctx.t("credit.askTotal"), {
+    reply_markup: cancelMenu(ctx.locale),
+  });
 });
 
 onStep(creditFlow, "credit:amount", async (ctx) => {
   const parsed = parseAmount(ctx.message!.text!);
   if (!parsed) {
-    await ctx.reply("⚠️ I could not read that amount. Try again, e.g. 120000000");
+    await ctx.reply(ctx.t("common.badAmount", { example: "120000000" }));
     return;
   }
   ctx.session.draft.totalAmount = parsed.amount;
   ctx.session.draft.currency = parsed.currency;
   ctx.session.step = "credit:duration";
   await ctx.reply(
-    `Total: <b>${formatMoney(parsed.amount, parsed.currency)}</b>\n\n` +
-      "Enter the duration in months (1–360):",
-    { parse_mode: "HTML", reply_markup: cancelMenu() }
+    ctx.t("credit.askDuration", {
+      amount: formatMoney(parsed.amount, parsed.currency),
+    }),
+    { parse_mode: "HTML", reply_markup: cancelMenu(ctx.locale) }
   );
 });
 
 onStep(creditFlow, "credit:duration", async (ctx) => {
   const months = Number(ctx.message!.text!.trim());
   if (!Number.isInteger(months) || months < 1 || months > 360) {
-    await ctx.reply("⚠️ Enter a whole number of months between 1 and 360.");
+    await ctx.reply(ctx.t("credit.badDuration"));
     return;
   }
 
@@ -98,26 +102,29 @@ onStep(creditFlow, "credit:duration", async (ctx) => {
 
   resetSession(ctx);
   await ctx.reply(
-    `✅ <b>Credit created</b>\n\n` +
-      `Bank: ${esc(credit.bankName)}\n` +
-      `Total: ${formatMoney(total, currency)}\n` +
-      `Duration: ${months} months\n` +
-      `Monthly payment: ${formatMoney(schedule[0].amount, currency)}\n` +
-      `First payment due: ${fmtDate(schedule[0].dueDate)}`,
+    ctx.t("credit.created", {
+      bank: esc(credit.bankName),
+      total: formatMoney(total, currency),
+      months,
+      monthly: formatMoney(schedule[0].amount, currency),
+      due: fmtDate(schedule[0].dueDate),
+    }),
     {
       parse_mode: "HTML",
       reply_markup: new InlineKeyboard().text(
-        "📋 Open schedule",
+        ctx.t("credit.openSchedule"),
         `credit:${credit.id}`
       ),
     }
   );
-  await ctx.reply("Choose the next action:", { reply_markup: mainMenu(ctx.role) });
+  await ctx.reply(ctx.t("common.next"), {
+    reply_markup: mainMenu(ctx.role, ctx.locale),
+  });
 });
 
 // ---------- Browsing credits ----------
 
-creditFlow.hears(BTN.credits, requireModule("CREDIT"), async (ctx) => {
+creditFlow.hears(labels("btn.credits"), requireModule("CREDIT"), async (ctx) => {
   const credits = await prisma.credit.findMany({
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     take: 20,
@@ -125,21 +132,22 @@ creditFlow.hears(BTN.credits, requireModule("CREDIT"), async (ctx) => {
   });
 
   if (credits.length === 0) {
-    await ctx.reply("No credits have been added yet.");
+    await ctx.reply(ctx.t("credit.none"));
     return;
   }
 
   const kb = new InlineKeyboard();
+  const addRow = onePerRow(kb);
   for (const credit of credits) {
     const paid = credit.payments.filter((p) => p.isPaid).length;
     const mark = credit.status === CreditStatus.CLOSED ? "✅" : "💳";
-    kb.text(
+    addRow(
       `${mark} ${credit.bankName} · ${paid}/${credit.payments.length}`,
       `credit:${credit.id}`
-    ).row();
+    );
   }
 
-  await ctx.reply("📋 <b>Credits</b>\n\nChoose one to open its schedule:", {
+  await ctx.reply(ctx.t("credit.list"), {
     parse_mode: "HTML",
     reply_markup: kb,
   });
@@ -153,7 +161,7 @@ async function renderCredit(ctx: BotContext, creditId: string, edit: boolean) {
   });
 
   if (!credit) {
-    await ctx.answerCallbackQuery("Credit not found.");
+    await ctx.answerCallbackQuery(ctx.t("credit.notFound"));
     return;
   }
 
@@ -164,27 +172,41 @@ async function renderCredit(ctx: BotContext, creditId: string, edit: boolean) {
 
   const text = [
     `💳 <b>${esc(credit.bankName)}</b>`,
-    `Total: ${formatMoney(total, credit.currency)}`,
-    `Duration: ${credit.duration} months`,
-    `Paid: ${formatMoney(paidSum, credit.currency)} (${paid.length}/${credit.payments.length})`,
-    `Remaining: ${formatMoney(total - paidSum, credit.currency)}`,
-    `Status: ${credit.status === CreditStatus.CLOSED ? "✅ Closed" : "🔄 Active"}`,
+    ctx.t("credit.cardTotal", { total: formatMoney(total, credit.currency) }),
+    ctx.t("credit.cardDuration", { months: credit.duration }),
+    ctx.t("credit.cardPaid", {
+      paid: formatMoney(paidSum, credit.currency),
+      count: paid.length,
+      total: credit.payments.length,
+    }),
+    ctx.t("credit.cardRemaining", {
+      remaining: formatMoney(total - paidSum, credit.currency),
+    }),
+    ctx.t("credit.cardStatus", {
+      status: ctx.t(
+        credit.status === CreditStatus.CLOSED
+          ? "credit.statusClosed"
+          : "credit.statusActive"
+      ),
+    }),
     "",
-    unpaid.length
-      ? "Tap an instalment to mark it as paid:"
-      : "All instalments have been paid.",
+    unpaid.length ? ctx.t("credit.tapInstalment") : ctx.t("credit.allPaid"),
   ].join("\n");
 
   const kb = new InlineKeyboard();
+  const addRow = onePerRow(kb);
   for (const payment of unpaid.slice(0, VISIBLE_PAYMENTS)) {
     const overdue = payment.dueDate < new Date() ? "⚠️ " : "";
-    kb.text(
+    addRow(
       `${overdue}${fmtDate(payment.dueDate)} · ${formatMoney(toNumber(payment.amount), credit.currency)}`,
       `pay:${payment.id}`
-    ).row();
+    );
   }
   if (unpaid.length > VISIBLE_PAYMENTS) {
-    kb.text(`… ${unpaid.length - VISIBLE_PAYMENTS} more instalments`, "noop").row();
+    addRow(
+      ctx.t("credit.moreInstalments", { count: unpaid.length - VISIBLE_PAYMENTS }),
+      "noop"
+    );
   }
 
   const options = { parse_mode: "HTML" as const, reply_markup: kb };
@@ -201,7 +223,7 @@ creditFlow.callbackQuery(/^credit:(.+)$/, requireModule("CREDIT"), async (ctx) =
 });
 
 creditFlow.callbackQuery("noop", (ctx) =>
-  ctx.answerCallbackQuery("Pay the earlier instalments first.")
+  ctx.answerCallbackQuery(ctx.t("credit.payEarlierFirst"))
 );
 
 // ---------- Marking an instalment as paid ----------
@@ -214,11 +236,11 @@ creditFlow.callbackQuery(/^pay:(.+)$/, requireModule("CREDIT"), async (ctx) => {
   });
 
   if (!payment) {
-    await ctx.answerCallbackQuery("Instalment not found.");
+    await ctx.answerCallbackQuery(ctx.t("credit.instalmentNotFound"));
     return;
   }
   if (payment.isPaid) {
-    await ctx.answerCallbackQuery("Already marked as paid.");
+    await ctx.answerCallbackQuery(ctx.t("credit.alreadyPaid"));
     return;
   }
 
@@ -244,6 +266,6 @@ creditFlow.callbackQuery(/^pay:(.+)$/, requireModule("CREDIT"), async (ctx) => {
     `${esc(payment.credit.bankName)} · ${formatMoney(toNumber(payment.amount), payment.credit.currency)} · due ${fmtDate(payment.dueDate)}`
   );
 
-  await ctx.answerCallbackQuery("✅ Marked as paid");
+  await ctx.answerCallbackQuery(ctx.t("credit.markedPaid"));
   await renderCredit(ctx, payment.creditId, true);
 });
