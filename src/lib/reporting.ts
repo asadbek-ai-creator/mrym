@@ -1,7 +1,9 @@
-import { Currency } from "@prisma/client";
+import { Currency, Locale } from "@prisma/client";
 import { format, startOfMonth, subMonths } from "date-fns";
+import { ru } from "date-fns/locale";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/money";
+import { categoryLabel } from "@/lib/bot/i18n";
 
 export const CURRENCIES: Currency[] = [Currency.UZS, Currency.USD];
 
@@ -100,6 +102,7 @@ export async function getSummary(): Promise<Record<Currency, CurrencyTotals>> {
 }
 
 export interface CategorySlice {
+  /** Already translated for display; grouping happens on the canonical name. */
   category: string;
   amount: number;
 }
@@ -137,15 +140,28 @@ export async function getExpenseBreakdown(): Promise<Record<Currency, CategorySl
         .filter((slice) => slice.amount > 0)
         .sort((a, b) => b.amount - a.amount);
 
-      if (slices.length <= CATEGORY_SLOTS + 1) return [currency, slices];
+      const folded =
+        slices.length <= CATEGORY_SLOTS + 1
+          ? slices
+          : [
+              ...slices.slice(0, CATEGORY_SLOTS),
+              {
+                category: "Other",
+                amount: slices
+                  .slice(CATEGORY_SLOTS)
+                  .reduce((total, slice) => total + slice.amount, 0),
+              },
+            ];
 
-      const head = slices.slice(0, CATEGORY_SLOTS);
-      const tail = slices.slice(CATEGORY_SLOTS);
-      head.push({
-        category: "Other",
-        amount: tail.reduce((total, slice) => total + slice.amount, 0),
-      });
-      return [currency, head];
+      // Translate last, so folding and grouping stay keyed on the canonical
+      // name the bot stored.
+      return [
+        currency,
+        folded.map((slice) => ({
+          ...slice,
+          category: categoryLabel(Locale.RU, slice.category),
+        })),
+      ];
     })
   ) as Record<Currency, CategorySlice[]>;
 }
@@ -188,7 +204,9 @@ export async function getMonthlySeries(
         const date = startOfMonth(subMonths(new Date(), months - 1 - index));
         return {
           month: format(date, "yyyy-MM"),
-          label: format(date, "MMM yyyy"),
+          // The dashboard is the only consumer of this series, and it renders
+          // in Russian.
+          label: format(date, "LLL yyyy", { locale: ru }),
           income: 0,
           expense: 0,
           creditPaid: 0,

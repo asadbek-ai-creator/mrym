@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 import { format } from "date-fns";
+import { ru } from "date-fns/locale";
+import { Locale } from "@prisma/client";
 import { hasSession } from "@/lib/auth";
+import { roleLabel } from "@/lib/bot/i18n";
 import { prisma } from "@/lib/prisma";
 import {
   getExpenseBreakdown,
@@ -13,9 +16,36 @@ import { Overview } from "./overview";
 // Figures must reflect what the bot wrote a moment ago, never a cached page.
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Dashboard · Mariyam" };
+export const metadata = { title: "Панель · Mariyam" };
 
 const LOG_LIMIT = 25;
+
+/**
+ * Human wording for the action codes the bot writes.
+ *
+ * The stored code stays canonical so the audit trail is searchable and does
+ * not depend on anyone's language; only the display is translated. An action
+ * with no entry here falls back to its raw code rather than disappearing.
+ */
+const ACTION_LABELS: Record<string, string> = {
+  BOT_START: "Запуск бота",
+  CASH_INCOME_CREATED: "Приход по кассе",
+  CASH_EXPENSE_CREATED: "Расход по кассе",
+  BANK_INCOME_CREATED: "Приход по банку",
+  BANK_EXPENSE_CREATED: "Расход по банку",
+  CREDIT_CREATED: "Кредит создан",
+  CREDIT_PAYMENT_PAID: "Платёж по кредиту оплачен",
+  TRANSACTION_AMOUNT_EDITED: "Сумма изменена",
+  TRANSACTION_COMMENT_EDITED: "Комментарий изменён",
+  TRANSACTION_DELETED: "Запись удалена",
+  USER_UPSERTED: "Пользователь добавлен или изменён",
+  USER_DELETED: "Пользователь удалён",
+  USER_ACCESS_REVOKED: "Доступ отозван",
+  EXPORT_XLSX: "Экспорт в Excel",
+  LANGUAGE_CHANGED: "Язык изменён",
+  DASHBOARD_LOGIN: "Вход в панель",
+  DASHBOARD_LOGIN_FAILED: "Неудачный вход в панель",
+};
 
 export default async function DashboardPage() {
   // The proxy already redirected anonymous visitors; this is the check that
@@ -43,10 +73,10 @@ export default async function DashboardPage() {
             </span>
             <div>
               <h1 className="text-sm font-semibold tracking-tight">
-                Financial accounting
+                Финансовый учёт
               </h1>
               <p className="text-xs text-[var(--ink-muted)]">
-                {format(new Date(), "d MMMM yyyy, HH:mm")}
+                {format(new Date(), "d MMMM yyyy, HH:mm", { locale: ru })}
               </p>
             </div>
           </div>
@@ -56,7 +86,7 @@ export default async function DashboardPage() {
               type="submit"
               className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--ink-secondary)] transition hover:bg-[var(--surface-sunken)] hover:text-[var(--ink)]"
             >
-              Sign out
+              Выйти
             </button>
           </form>
         </div>
@@ -67,25 +97,27 @@ export default async function DashboardPage() {
 
         <section className="mt-6 rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
           <header className="border-b border-[var(--line)] px-5 py-4">
-            <h2 className="text-sm font-semibold tracking-tight">Action log</h2>
+            <h2 className="text-sm font-semibold tracking-tight">
+              Журнал действий
+            </h2>
             <p className="mt-0.5 text-xs text-[var(--ink-muted)]">
-              The last {LOG_LIMIT} actions recorded by the bot and this dashboard.
+              Последние {LOG_LIMIT} действий, записанных ботом и этой панелью.
             </p>
           </header>
 
           {logs.length === 0 ? (
             <p className="px-5 py-8 text-center text-sm text-[var(--ink-muted)]">
-              Nothing has been recorded yet.
+              Записей пока нет.
             </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wider text-[var(--ink-muted)]">
-                    <th className="px-5 py-2.5 font-medium">When</th>
-                    <th className="px-5 py-2.5 font-medium">Who</th>
-                    <th className="px-5 py-2.5 font-medium">Action</th>
-                    <th className="px-5 py-2.5 font-medium">Details</th>
+                    <th className="px-5 py-2.5 font-medium">Когда</th>
+                    <th className="px-5 py-2.5 font-medium">Кто</th>
+                    <th className="px-5 py-2.5 font-medium">Действие</th>
+                    <th className="px-5 py-2.5 font-medium">Детали</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -102,17 +134,23 @@ export default async function DashboardPage() {
                           <>
                             <span className="font-medium">{log.user.name}</span>
                             <span className="ml-1.5 text-xs text-[var(--ink-muted)]">
-                              {log.user.role} · {log.user.telegramId.toString()}
+                              {roleLabel(Locale.RU, log.user.role)} ·{" "}
+                              {log.user.telegramId.toString()}
                             </span>
                           </>
                         ) : (
-                          <span className="text-[var(--ink-muted)]">system</span>
+                          <span className="text-[var(--ink-muted)]">система</span>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-5 py-3">
-                        <code className="rounded bg-[var(--surface-sunken)] px-1.5 py-0.5 text-xs">
-                          {log.action}
-                        </code>
+                        {/* The raw code stays reachable on hover for auditing. */}
+                        <span title={log.action}>
+                          {ACTION_LABELS[log.action] ?? (
+                            <code className="rounded bg-[var(--surface-sunken)] px-1.5 py-0.5 text-xs">
+                              {log.action}
+                            </code>
+                          )}
+                        </span>
                       </td>
                       <td className="px-5 py-3 text-[var(--ink-secondary)]">
                         {log.details ?? "—"}

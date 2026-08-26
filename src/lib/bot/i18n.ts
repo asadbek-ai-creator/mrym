@@ -221,6 +221,9 @@ const en = {
   "cat.Transport": "Transport",
   "cat.Taxes": "Taxes",
   "cat.Other": "Other",
+  // Synthetic buckets produced by the expense breakdown, not real categories.
+  "cat.Bank transfers": "Bank transfers",
+  "cat.Uncategorised": "Uncategorised",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -439,6 +442,8 @@ const ru_: Record<TranslationKey, string> = {
   "cat.Transport": "Транспорт",
   "cat.Taxes": "Налоги",
   "cat.Other": "Прочее",
+  "cat.Bank transfers": "Банковские переводы",
+  "cat.Uncategorised": "Без категории",
 };
 
 const DICTIONARIES: Record<Locale, Record<TranslationKey, string>> = {

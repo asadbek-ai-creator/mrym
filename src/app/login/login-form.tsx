@@ -12,7 +12,7 @@ export function LoginForm({ next }: { next: string }) {
 
       <label className="flex flex-col gap-2">
         <span className="text-sm font-medium text-[var(--ink-secondary)]">
-          Administrator password
+          Пароль администратора
         </span>
         <input
           name="password"
@@ -41,7 +41,7 @@ export function LoginForm({ next }: { next: string }) {
         className="mt-1 rounded-lg bg-[var(--ink)] px-3 py-2.5 text-[15px] font-medium text-[var(--surface)]
                    transition hover:opacity-90 disabled:opacity-50"
       >
-        {pending ? "Signing in…" : "Sign in"}
+        {pending ? "Вход…" : "Войти"}
       </button>
     </form>
   );

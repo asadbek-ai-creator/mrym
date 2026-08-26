@@ -125,16 +125,16 @@ export function IncomeExpenseChart({
 
   return (
     <Panel
-      title="Income and expense by month"
-      hint="Cash and bank combined."
+      title="Приход и расход по месяцам"
+      hint="Касса и банк вместе."
     >
       {/* Legend sits above the plot so identity is never carried by colour alone. */}
       <ul className="mb-3 flex items-center gap-4 text-xs text-[var(--ink-secondary)]">
         <li className="flex items-center gap-1.5">
-          <Swatch color={SERIES.income} /> Income
+          <Swatch color={SERIES.income} /> Приход
         </li>
         <li className="flex items-center gap-1.5">
-          <Swatch color={SERIES.expense} /> Expense
+          <Swatch color={SERIES.expense} /> Расход
         </li>
       </ul>
 
@@ -157,12 +157,12 @@ export function IncomeExpenseChart({
                     currency={currency}
                     rows={[
                       {
-                        label: "Income",
+                        label: "Приход",
                         value: Number(payload[0]?.payload.income ?? 0),
                         color: SERIES.income,
                       },
                       {
-                        label: "Expense",
+                        label: "Расход",
                         value: Number(payload[0]?.payload.expense ?? 0),
                         color: SERIES.expense,
                       },
@@ -177,7 +177,7 @@ export function IncomeExpenseChart({
           </BarChart>
         </ResponsiveContainer>
       ) : (
-        <Empty label={`No ${currency} transactions in the last 12 months.`} />
+        <Empty label={`Операций в ${currency} за последние 12 месяцев нет.`} />
       )}
     </Panel>
   );
@@ -196,15 +196,15 @@ export function MarginChart({
 
   return (
     <Panel
-      title="Net margin by month"
-      hint="Income − (expense + credit instalments paid)."
+      title="Чистая маржа по месяцам"
+      hint="Приход − (расход + оплаченные платежи по кредитам)."
     >
       <ul className="mb-3 flex items-center gap-4 text-xs text-[var(--ink-secondary)]">
         <li className="flex items-center gap-1.5">
-          <Swatch color={SERIES.positive} /> Profit
+          <Swatch color={SERIES.positive} /> Прибыль
         </li>
         <li className="flex items-center gap-1.5">
-          <Swatch color={SERIES.negative} /> Loss
+          <Swatch color={SERIES.negative} /> Убыток
         </li>
       </ul>
 
@@ -229,15 +229,15 @@ export function MarginChart({
                     title={String(label)}
                     currency={currency}
                     rows={[
-                      { label: "Income", value: point.income, color: SERIES.income },
-                      { label: "Expense", value: point.expense, color: SERIES.expense },
+                      { label: "Приход", value: point.income, color: SERIES.income },
+                      { label: "Расход", value: point.expense, color: SERIES.expense },
                       {
-                        label: "Credits paid",
+                        label: "Оплачено по кредитам",
                         value: point.creditPaid,
                         color: "var(--series-4)",
                       },
                       {
-                        label: "Margin",
+                        label: "Маржа",
                         value: point.margin,
                         color: point.margin >= 0 ? SERIES.positive : SERIES.negative,
                       },
@@ -257,7 +257,7 @@ export function MarginChart({
           </BarChart>
         </ResponsiveContainer>
       ) : (
-        <Empty label={`No ${currency} activity in the last 12 months.`} />
+        <Empty label={`Движений в ${currency} за последние 12 месяцев нет.`} />
       )}
     </Panel>
   );
@@ -275,7 +275,7 @@ export function ExpenseBreakdownChart({
   const total = data.reduce((sum, slice) => sum + slice.amount, 0);
 
   return (
-    <Panel title="Expense breakdown" hint="All expenses to date, by category.">
+    <Panel title="Структура расходов" hint="Все расходы за всё время, по категориям.">
       {total > 0 ? (
         <div className="flex flex-col items-center gap-6 sm:flex-row">
           <ResponsiveContainer width="100%" height={200} className="max-w-[200px]">
@@ -305,7 +305,7 @@ export function ExpenseBreakdownChart({
                       currency={currency}
                       rows={[
                         {
-                          label: `${((Number(payload[0].value) / total) * 100).toFixed(1)}% of expenses`,
+                          label: `${((Number(payload[0].value) / total) * 100).toFixed(1)}% расходов`,
                           value: Number(payload[0].value),
                           color: SLICE_COLORS[
                             data.findIndex((s) => s.category === payload[0].name) %
@@ -343,7 +343,7 @@ export function ExpenseBreakdownChart({
           </ul>
         </div>
       ) : (
-        <Empty label={`No ${currency} expenses recorded yet.`} />
+        <Empty label={`Расходов в ${currency} пока нет.`} />
       )}
     </Panel>
   );

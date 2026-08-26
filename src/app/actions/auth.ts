@@ -15,12 +15,12 @@ export async function login(
   const password = String(formData.get("password") ?? "");
   const next = String(formData.get("next") ?? "/dashboard");
 
-  if (!password) return { error: "Enter the password." };
+  if (!password) return { error: "Введите пароль." };
   if (!checkPassword(password)) {
     await prisma.actionLog.create({
       data: { action: "DASHBOARD_LOGIN_FAILED" },
     });
-    return { error: "Incorrect password." };
+    return { error: "Неверный пароль." };
   }
 
   await startSession();

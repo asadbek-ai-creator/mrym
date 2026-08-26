@@ -34,11 +34,11 @@ export function Overview({ data }: { data: OverviewData }) {
       {/* One filter row above everything it scopes. */}
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-xs font-medium uppercase tracking-wider text-[var(--ink-muted)]">
-          Overview
+          Обзор
         </h2>
         <div
           role="group"
-          aria-label="Currency"
+          aria-label="Валюта"
           className="flex rounded-lg border border-[var(--line)] bg-[var(--surface)] p-0.5"
         >
           {CURRENCIES.map((option) => (
@@ -63,19 +63,19 @@ export function Overview({ data }: { data: OverviewData }) {
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatTile
-          label="Cash balance"
+          label="Остаток по кассе"
           value={formatMoney(totals.cashBalance, currency)}
-          detail={`In ${formatMoney(totals.cashIncome, currency)} · out ${formatMoney(totals.cashExpense, currency)}`}
+          detail={`Приход ${formatMoney(totals.cashIncome, currency)} · расход ${formatMoney(totals.cashExpense, currency)}`}
         />
         <StatTile
-          label="Bank balance"
+          label="Остаток по банку"
           value={formatMoney(totals.bankBalance, currency)}
-          detail={`In ${formatMoney(totals.bankIncome, currency)} · out ${formatMoney(totals.bankExpense, currency)}`}
+          detail={`Приход ${formatMoney(totals.bankIncome, currency)} · расход ${formatMoney(totals.bankExpense, currency)}`}
         />
         <StatTile
-          label="Credits pending"
+          label="Остаток по кредитам"
           value={formatMoney(totals.creditPending, currency)}
-          detail={`Paid so far ${formatMoney(totals.creditPaid, currency)}`}
+          detail={`Оплачено ${formatMoney(totals.creditPaid, currency)}`}
         />
       </div>
 
@@ -102,7 +102,7 @@ function MarginHero({
   return (
     <section className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-6">
       <p className="text-xs font-medium uppercase tracking-wider text-[var(--ink-muted)]">
-        Net margin
+        Чистая маржа
       </p>
 
       <p
@@ -114,11 +114,14 @@ function MarginHero({
       </p>
 
       <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[var(--ink-secondary)]">
-        <Term value={formatMoney(totals.totalIncome, currency)} label="income" />
+        <Term value={formatMoney(totals.totalIncome, currency)} label="приход" />
         <span aria-hidden className="text-[var(--ink-muted)]">−</span>
-        <Term value={formatMoney(totals.totalExpense, currency)} label="expense" />
+        <Term value={formatMoney(totals.totalExpense, currency)} label="расход" />
         <span aria-hidden className="text-[var(--ink-muted)]">−</span>
-        <Term value={formatMoney(totals.creditPaid, currency)} label="credits paid" />
+        <Term
+          value={formatMoney(totals.creditPaid, currency)}
+          label="оплачено по кредитам"
+        />
       </p>
     </section>
   );

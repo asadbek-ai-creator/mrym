@@ -1,6 +1,6 @@
 import { LoginForm } from "./login-form";
 
-export const metadata = { title: "Sign in · Mariyam" };
+export const metadata = { title: "Вход · Mariyam" };
 
 export default async function LoginPage(props: PageProps<"/login">) {
   const params = await props.searchParams;
@@ -19,10 +19,10 @@ export default async function LoginPage(props: PageProps<"/login">) {
             ₮
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">
-            Financial accounting
+            Финансовый учёт
           </h1>
           <p className="mt-1 text-sm text-[var(--ink-secondary)]">
-            Administrator access to the dashboard.
+            Доступ к панели для администратора.
           </p>
         </div>
 
@@ -31,7 +31,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
         </div>
 
         <p className="mt-6 text-center text-xs text-[var(--ink-muted)]">
-          Data entry happens in the Telegram bot. This dashboard is read-only.
+          Данные вносятся через Telegram-бот. Эта панель — только для просмотра.
         </p>
       </div>
     </main>
