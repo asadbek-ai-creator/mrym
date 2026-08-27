@@ -20,10 +20,12 @@ export { CASH_CATEGORIES, labels };
 export function mainMenu(role: Role, locale: Locale): Keyboard {
   const label = (key: Parameters<typeof t>[1]) => t(locale, key);
 
-  const kb = new Keyboard()
-    .text(label("btn.cashIncome"))
-    .text(label("btn.cashExpense"))
-    .row();
+  // The store switcher sits on its own row at the top: it is the control that
+  // decides where everything below it gets filed, so it should never be
+  // mistaken for one of the entry buttons.
+  const kb = new Keyboard().text(label("btn.changeStore")).row();
+
+  kb.text(label("btn.cashIncome")).text(label("btn.cashExpense")).row();
 
   if (can(role, "BANK")) {
     kb.text(label("btn.bankIncome")).text(label("btn.bankExpense")).row();
@@ -37,7 +39,8 @@ export function mainMenu(role: Role, locale: Locale): Keyboard {
 
   if (can(role, "ADMIN")) {
     kb.row().text(label("btn.logs")).text(label("btn.users"));
-    kb.row().text(label("btn.requests"));
+    kb.row().text(label("btn.requests")).text(label("btn.companies"));
+    kb.row().text(label("btn.access")).text(label("btn.regular"));
   }
 
   return kb.resized().persistent();
@@ -75,6 +78,13 @@ export function dateKeyboard(locale: Locale): InlineKeyboard {
     .text(t(locale, "bank.yesterday"), "date:yesterday")
     .row()
     .text(t(locale, "bank.manualDate"), "date:manual");
+}
+
+/** Asks which account money moves through, as `<prefix>:CASH` / `<prefix>:BANK`. */
+export function sourceKeyboard(prefix: string, locale: Locale): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("💵 " + t(locale, "common.cash"), prefix + ":CASH")
+    .text("🏦 " + t(locale, "common.bank"), prefix + ":BANK");
 }
 
 export function languageKeyboard(): InlineKeyboard {

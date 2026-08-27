@@ -1,4 +1,5 @@
-import { Currency, Locale } from "@prisma/client";
+import { Currency, Locale, Prisma } from "@prisma/client";
+import { cacheLife, cacheTag } from "next/cache";
 import { format, startOfMonth, subMonths } from "date-fns";
 import { ru } from "date-fns/locale";
 import { prisma } from "@/lib/prisma";
@@ -6,6 +7,31 @@ import { toNumber } from "@/lib/money";
 import { categoryLabel } from "@/lib/bot/i18n";
 
 export const CURRENCIES: Currency[] = [Currency.UZS, Currency.USD];
+
+/**
+ * The cache tag every report shares.
+ *
+ * One tag rather than one per company: a write against any company changes
+ * both that company's figures and the aggregate "all companies" view, so the
+ * two would always be invalidated together anyway.
+ */
+export const REPORTS_TAG = "reports";
+
+/**
+ * `null` means every company aggregated; a string isolates one.
+ *
+ * The filter is an argument rather than ambient state so it becomes part of
+ * the `use cache` key — each company gets its own cache entry.
+ */
+export type CompanyFilter = string | null;
+
+/** Soft-deleted rows are invisible to every report. */
+function scope(companyId: CompanyFilter): Prisma.TransactionWhereInput {
+  return {
+    isDeleted: false,
+    ...(companyId ? { companyId } : {}),
+  };
+}
 
 export interface CurrencyTotals {
   currency: Currency;
@@ -15,13 +41,13 @@ export interface CurrencyTotals {
   bankExpense: number;
   /** Credit instalments already marked as paid. */
   creditPaid: number;
-  /** Credit instalments still outstanding. */
+  /** Credit instalments still outstanding — the residual. */
   creditPending: number;
   cashBalance: number;
   bankBalance: number;
   totalIncome: number;
   totalExpense: number;
-  /** (all incomes) − (all expenses + paid credits) */
+  /** (all incomes) − (all expenses) */
   netMargin: number;
 }
 
@@ -47,7 +73,11 @@ function derive(totals: CurrencyTotals): CurrencyTotals {
   totals.bankBalance = totals.bankIncome - totals.bankExpense;
   totals.totalIncome = totals.cashIncome + totals.bankIncome;
   totals.totalExpense = totals.cashExpense + totals.bankExpense;
-  totals.netMargin = totals.totalIncome - (totals.totalExpense + totals.creditPaid);
+  // Credit instalments and regular payments reach the books as ordinary
+  // EXPENSE transactions the moment they are processed, so they are already
+  // inside `totalExpense`. Subtracting `creditPaid` again here would count
+  // every repayment twice.
+  totals.netMargin = totals.totalIncome - totals.totalExpense;
   return totals;
 }
 
@@ -58,16 +88,27 @@ function derive(totals: CurrencyTotals): CurrencyTotals {
  * stores no exchange rate, so summing UZS and USD would produce a number that
  * means nothing.
  */
-export async function getSummary(): Promise<Record<Currency, CurrencyTotals>> {
+export async function getSummary(
+  companyId: CompanyFilter = null
+): Promise<Record<Currency, CurrencyTotals>> {
+  "use cache";
+  cacheTag(REPORTS_TAG);
+  cacheLife("hours");
+
   const [txGroups, credits] = await Promise.all([
     prisma.transaction.groupBy({
       by: ["source", "type", "currency"],
+      where: scope(companyId),
       _sum: { amount: true },
     }),
     prisma.credit.findMany({
+      where: { isDeleted: false, ...(companyId ? { companyId } : {}) },
       select: {
         currency: true,
-        payments: { select: { amount: true, isPaid: true } },
+        payments: {
+          where: { isDeleted: false },
+          select: { amount: true, isPaid: true },
+        },
       },
     }),
   ]);
@@ -88,6 +129,8 @@ export async function getSummary(): Promise<Record<Currency, CurrencyTotals>> {
     }
   }
 
+  // Reported for the credit card only. `creditPaid` deliberately stays out of
+  // the margin: see `derive`.
   for (const credit of credits) {
     const totals = result[credit.currency];
     for (const payment of credit.payments) {
@@ -115,10 +158,16 @@ const CATEGORY_SLOTS = 5;
  * is folded into a single "Other" slice, because past ~6 segments adjacent
  * colours stop being tellable apart.
  */
-export async function getExpenseBreakdown(): Promise<Record<Currency, CategorySlice[]>> {
+export async function getExpenseBreakdown(
+  companyId: CompanyFilter = null
+): Promise<Record<Currency, CategorySlice[]>> {
+  "use cache";
+  cacheTag(REPORTS_TAG);
+  cacheLife("hours");
+
   const groups = await prisma.transaction.groupBy({
     by: ["currency", "source", "category"],
-    where: { type: "EXPENSE" },
+    where: { ...scope(companyId), type: "EXPENSE" },
     _sum: { amount: true },
   });
 
@@ -173,6 +222,7 @@ export interface MonthPoint {
   label: string;
   income: number;
   expense: number;
+  /** Credit instalments settled that month, already part of `expense`. */
   creditPaid: number;
   margin: number;
 }
@@ -183,17 +233,27 @@ export interface MonthPoint {
  * month bucketing free of database timezone surprises.
  */
 export async function getMonthlySeries(
-  months = 12
+  months = 12,
+  companyId: CompanyFilter = null
 ): Promise<Record<Currency, MonthPoint[]>> {
+  "use cache";
+  cacheTag(REPORTS_TAG);
+  cacheLife("hours");
+
   const from = startOfMonth(subMonths(new Date(), months - 1));
 
   const [transactions, payments] = await Promise.all([
     prisma.transaction.findMany({
-      where: { date: { gte: from } },
+      where: { ...scope(companyId), date: { gte: from } },
       select: { date: true, type: true, amount: true, currency: true },
     }),
     prisma.creditPayment.findMany({
-      where: { isPaid: true, paidDate: { gte: from } },
+      where: {
+        isDeleted: false,
+        isPaid: true,
+        paidDate: { gte: from },
+        credit: { isDeleted: false, ...(companyId ? { companyId } : {}) },
+      },
       select: { paidDate: true, amount: true, credit: { select: { currency: true } } },
     }),
   ]);
@@ -227,6 +287,8 @@ export async function getMonthlySeries(
     else point.expense += toNumber(tx.amount);
   }
 
+  // Shown as its own line on the chart; not added to `expense`, which already
+  // contains the auto-posted repayment.
   for (const payment of payments) {
     const point = findPoint(payment.credit.currency, payment.paidDate!);
     if (!point) continue;
@@ -235,9 +297,21 @@ export async function getMonthlySeries(
 
   for (const currency of CURRENCIES) {
     for (const point of buckets[currency]) {
-      point.margin = point.income - (point.expense + point.creditPaid);
+      point.margin = point.income - point.expense;
     }
   }
 
   return buckets;
+}
+
+/** The companies the dashboard filter offers. */
+export async function getCompanies() {
+  "use cache";
+  cacheTag(REPORTS_TAG);
+  cacheLife("hours");
+
+  return prisma.company.findMany({
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
 }

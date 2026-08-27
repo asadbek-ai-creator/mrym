@@ -34,11 +34,17 @@ minutes after creating it (`EDIT_WINDOW_MS` in `src/lib/bot/auth.ts`).
 
 ```
 Net margin = (cash income + bank income)
-           − (cash expense + bank expense + credit instalments marked paid)
+           − (cash expense + bank expense)
 ```
 
+Credit instalments and regular payments are **not** a separate term. Marking an
+instalment paid, and the nightly cron posting a regular payment, both write an
+ordinary `EXPENSE` transaction, so they are already inside "bank expense" /
+"cash expense" — adding them again would count every repayment twice.
+
 Balances and margin are computed per currency (UZS and USD are never summed
-together) in `src/lib/reporting.ts`.
+together) in `src/lib/reporting.ts`, scoped to one company or aggregated across
+all of them.
 
 ## Environment
 
@@ -50,10 +56,11 @@ Copy `.env.example` to `.env` and fill it in:
 | `TELEGRAM_BOT_TOKEN` | From [@BotFather](https://t.me/BotFather) |
 | `TELEGRAM_WEBHOOK_SECRET` | Long random string; guards the webhook and the setup route |
 | `ADMIN_TELEGRAM_IDS` | Comma-separated bootstrap admin IDs |
+| `CRON_SECRET` | Guards `/api/cron/regular-payments`; Vercel sets this itself in production |
 | `DASHBOARD_PASSWORD` | Password for the dashboard login screen |
 | `AUTH_SECRET` | Long random string; signs the session cookie |
 
-Generate the two random secrets with:
+Generate each random secret with:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"

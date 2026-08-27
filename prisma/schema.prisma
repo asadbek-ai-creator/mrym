@@ -1,4 +1,4 @@
-// Prisma schema for the Financial Accounting System
+// Prisma schema for the Financial Accounting System — v2.1
 // Docs: https://pris.ly/d/prisma-schema
 
 generator client {
@@ -53,42 +53,136 @@ enum UserStatus {
   REJECTED
 }
 
+// Where a transaction came from. Everything a human typed is MANUAL; the two
+// automatic origins are posted by the system and must never be double-counted
+// against the credit schedule or the regular-payment table they came from.
+enum TxOrigin {
+  MANUAL
+  CREDIT_PAYMENT
+  REGULAR_PAYMENT
+}
+
 // ---------- Models ----------
 
+// A store. Every financial record belongs to exactly one of them; the
+// dashboard either aggregates across all stores or isolates one.
+model Company {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  transactions    Transaction[]
+  credits         Credit[]
+  regularPayments RegularPayment[]
+  logs            ActionLog[]
+
+  // Who may post to this store, and who currently has it open.
+  members     CompanyAccess[]
+  activeUsers User[]          @relation("ActiveCompany")
+
+  @@map("companies")
+}
+
+/**
+ * Which stores a user is authorised to manage.
+ * An explicit join model rather than an implicit many-to-many: an ERP needs to
+ * answer "who granted this person access to this store, and when", and a
+ * hidden join table cannot carry those columns or grow new ones later.
+ */
+model CompanyAccess {
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  grantedAt DateTime @default(now())
+  // The admin who granted it. Null for access created by the bootstrap seed.
+  grantedBy String?
+
+  @@id([userId, companyId])
+  @@index([companyId])
+  @@map("company_access")
+}
+
 model User {
-  id           String        @id @default(cuid())
-  telegramId   BigInt        @unique
-  name         String
-  role         Role          @default(CASHIER)
-  status       UserStatus    @default(PENDING)
-  language     Locale        @default(RU)
-  createdAt    DateTime      @default(now())
+  id         String     @id @default(cuid())
+  telegramId BigInt     @unique
+  name       String
+  role       Role       @default(CASHIER)
+  status     UserStatus @default(PENDING)
+  language   Locale     @default(RU)
+  createdAt  DateTime   @default(now())
+
+  /**
+   * The store this user currently has open. Every entry they make is filed
+   * against it, so the bot never has to ask.
+   * It lives in the database rather than in a session because the bot runs on
+   * serverless webhooks: there is no memory between two updates, and a
+   * process-local "current store" would silently reset mid-shift — exactly the
+   * wrong-store mistake this is meant to prevent.
+   * Nullable because a user who has not picked a store yet must be unable to
+   * post at all, rather than defaulting into someone else's books.
+   */
+  activeCompanyId String?
+  activeCompany   Company? @relation("ActiveCompany", fields: [activeCompanyId], references: [id], onDelete: SetNull)
+
+  /**
+   * The stores this user may switch to.
+   */
+  companies CompanyAccess[]
 
   transactions Transaction[]
   credits      Credit[]
   logs         ActionLog[]
 
+  @@index([activeCompanyId])
   @@map("users")
 }
 
 model Transaction {
-  id        String   @id @default(cuid())
-  type      TxType
-  source    TxSource
-  amount    Decimal  @db.Decimal(18, 2)
-  currency  Currency @default(UZS)
-  category  String?
-  comment   String?
+  id           String   @id @default(cuid())
+  type         TxType
+  source       TxSource
+  amount       Decimal  @db.Decimal(18, 2)
+  currency     Currency @default(UZS)
+  category     String?
+  comment      String?
   // Bank-specific optional fields
   bankName     String?
   counterparty String?
   // Business date of the transaction (may differ from createdAt)
-  date      DateTime @default(now())
-  createdAt DateTime @default(now())
+  date         DateTime @default(now())
+  createdAt    DateTime @default(now())
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
+  // Financial records are never destroyed: a "delete" flips this flag so the
+  // action log can still show what was removed and by whom.
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
 
+  origin TxOrigin @default(MANUAL)
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  // Null for cron/system postings — those have no human author.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  // Automatic origins link back to what produced them. Both links are unique
+  // per source event, so a retried cron run or a double-tapped "Paid" button
+  // can never post the same expense twice.
+  creditPaymentId String?        @unique
+  creditPayment   CreditPayment? @relation(fields: [creditPaymentId], references: [id])
+
+  regularPaymentId String?
+  regularPayment   RegularPayment? @relation(fields: [regularPaymentId], references: [id])
+  // Posting period of a regular payment, "YYYY-MM". Null for everything else;
+  // Postgres lets nulls repeat, so manual rows are unaffected by the unique.
+  periodKey        String?
+
+  @@unique([regularPaymentId, periodKey])
+  @@index([companyId, date])
+  @@index([companyId, isDeleted])
   @@index([userId])
   @@index([source, type])
   @@index([date])
@@ -96,18 +190,31 @@ model Transaction {
 }
 
 model Credit {
-  id          String          @id @default(cuid())
-  bankName    String
-  totalAmount Decimal         @db.Decimal(18, 2)
-  currency    Currency        @default(UZS)
-  duration    Int // number of months
-  status      CreditStatus    @default(ACTIVE)
-  createdAt   DateTime        @default(now())
+  id            String       @id @default(cuid())
+  bankName      String
+  // Captured from the bot as instalment × months; totalAmount stays stored so
+  // reports never have to recompute it.
+  monthlyAmount Decimal      @db.Decimal(18, 2)
+  totalAmount   Decimal      @db.Decimal(18, 2)
+  currency      Currency     @default(UZS)
+  duration      Int // number of months
+  // Which account the instalments are repaid from. Asked once when the credit
+  // is created, so marking an instalment paid knows where to post the expense.
+  source        TxSource     @default(BANK)
+  status        CreditStatus @default(ACTIVE)
+  createdAt     DateTime     @default(now())
+
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
 
   userId   String
   user     User            @relation(fields: [userId], references: [id])
   payments CreditPayment[]
 
+  @@index([companyId, status])
   @@index([userId])
   @@map("credits")
 }
@@ -119,12 +226,44 @@ model CreditPayment {
   isPaid   Boolean   @default(false)
   paidDate DateTime?
 
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
   creditId String
   credit   Credit @relation(fields: [creditId], references: [id], onDelete: Cascade)
+
+  // The EXPENSE transaction generated when this instalment was marked paid.
+  transaction Transaction?
 
   @@index([creditId])
   @@index([isPaid])
   @@map("credit_payments")
+}
+
+// A recurring expense (rent, salary, subscription) posted automatically by the
+// Vercel Cron route on its day of the month.
+model RegularPayment {
+  id         String   @id @default(cuid())
+  name       String
+  amount     Decimal  @db.Decimal(18, 2)
+  currency   Currency @default(UZS)
+  // 1–31. Months shorter than this fall back to their last day.
+  dayOfMonth Int
+  source     TxSource
+  category   String?
+  createdAt  DateTime @default(now())
+
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  transactions Transaction[]
+
+  @@index([companyId, isDeleted])
+  @@index([dayOfMonth])
+  @@map("regular_payments")
 }
 
 // Conversational state for the Telegram bot.
@@ -148,9 +287,15 @@ model ActionLog {
   timestamp DateTime @default(now())
 
   userId String?
-  user   User?  @relation(fields: [userId], references: [id])
+  user   User?   @relation(fields: [userId], references: [id])
+
+  // Set when the action concerned one company, so the log honours the
+  // dashboard's company filter. Null for account-level actions.
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id])
 
   @@index([userId])
+  @@index([companyId, timestamp])
   @@index([timestamp])
   @@map("action_logs")
 }

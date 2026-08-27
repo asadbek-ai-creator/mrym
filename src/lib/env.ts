@@ -29,6 +29,15 @@ export function authSecret(): Uint8Array {
   return new TextEncoder().encode(required("AUTH_SECRET"));
 }
 
+/**
+ * The shared secret Vercel Cron sends as `Authorization: Bearer <secret>`.
+ * Vercel populates CRON_SECRET itself; without it the route is left closed
+ * rather than open, so a missing variable cannot expose the endpoint.
+ */
+export function cronSecret(): string {
+  return required("CRON_SECRET");
+}
+
 /** Telegram ids that are always treated as ADMIN, used to bootstrap the system. */
 export function bootstrapAdminIds(): bigint[] {
   return (process.env.ADMIN_TELEGRAM_IDS ?? "")

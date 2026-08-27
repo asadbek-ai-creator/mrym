@@ -24,6 +24,10 @@ const en = {
   "btn.language": "🌐 Language",
   "btn.cancel": "❌ Cancel",
   "btn.skip": "⏭ Skip",
+  "btn.changeStore": "🏬 Change Store",
+  "btn.companies": "🏢 Stores",
+  "btn.access": "🔑 Store access",
+  "btn.regular": "🔁 Regular Payments",
 
   // ---------- Roles ----------
   "role.ADMIN": "Admin",
@@ -89,11 +93,73 @@ const en = {
   "bank.askName": "Date: <b>{date}</b>\n\nEnter the bank name:",
   "bank.askParty": "Enter the counterparty (who paid / who was paid):",
 
+  // ---------- Companies (multi-tenancy) ----------
+  "company.choose": "🏢 Which company is this for?",
+  "company.chosen": "Company: <b>{name}</b>",
+  "company.notFound": "Company not found.",
+  "company.needOne":
+    "⚠️ No companies have been created yet.\n\nAsk an administrator to add one before recording entries.",
+  "company.title": "🏢 <b>Companies</b>",
+  "company.listEmpty": "No companies have been added yet.",
+  "company.btnAdd": "➕ Add company",
+  "company.askName": "Enter the company name:",
+  "company.added": "✅ Company <b>{name}</b> added.",
+  "company.exists": "⚠️ A company with that name already exists.",
+  "company.badName": "⚠️ The name must be between 2 and 60 characters.",
+
+  // ---------- Regular payments ----------
+  "reg.title": "🔁 <b>Regular payments</b>",
+  "reg.intro": "These are posted automatically as expenses on their day of each month.",
+  "reg.none": "No regular payments have been set up yet.",
+  "reg.btnAdd": "➕ Add regular payment",
+  "reg.askName": "Enter a name for the payment.\n<i>For example: Office rent</i>",
+  "reg.askAmount": "Enter the amount charged each month:",
+  "reg.askDay":
+    "Amount: <b>{amount}</b>\n\nWhich day of the month is it charged? Enter 1–31.\n<i>In shorter months it is posted on the last day.</i>",
+  "reg.badDay": "⚠️ Enter a whole number between 1 and 31.",
+  "reg.askSource": "Which account does it come out of?",
+  "reg.created":
+    "✅ <b>Regular payment created</b>\n\n{name}\nCompany: {company}\nAmount: {amount}\nCharged on day {day} of each month\nAccount: {source}",
+  "reg.item": "{name} · {amount} · day {day}",
+  "reg.card":
+    "🔁 <b>{name}</b>\n\nCompany: {company}\nAmount: {amount}\nCharged on day {day} of each month\nAccount: {source}",
+  "reg.notFound": "Regular payment not found.",
+  "reg.confirmDelete": "Stop this regular payment? Past postings are kept.",
+  "reg.deleteYes": "🗑 Yes, stop it",
+  "reg.deleted": "🗑 Regular payment stopped.",
+
+  // ---------- Active store ----------
+  "store.choose": "🏬 <b>Choose the store you are working in:</b>",
+  "store.active":
+    "✅ You are now managing: <b>{name}</b>.\nAll your entries will be saved to this store.",
+  "store.current": "🏬 Current store: <b>{name}</b>",
+  "store.unchanged": "You are already managing {name}.",
+  "store.none":
+    "⚠️ You are not assigned to any store yet.\n\nAsk an administrator to give you access before recording anything.",
+  "store.notSelected":
+    "⚠️ <b>No store selected.</b>\n\nPress 🏬 Change Store and pick the one you are working in — entries cannot be saved until you do.",
+  "store.noAccess": "⛔️ You do not have access to that store.",
+  "store.notFound": "Store not found.",
+  "store.revoked":
+    "🏬 Your access to that store was withdrawn, so it is no longer selected.",
+
+  // ---------- Store access (admin) ----------
+  "sacc.title": "🔑 <b>Store access</b>\n\nChoose a user:",
+  "sacc.noUsers": "There are no active users yet.",
+  "sacc.noStores": "No stores have been created yet.",
+  "sacc.user":
+    "🔑 <b>{name}</b> — {role}\n\nTap a store to grant or revoke access. ✅ means they have it.",
+  "sacc.granted": "✅ Access granted: {store}",
+  "sacc.revoked": "🚫 Access revoked: {store}",
+  "sacc.adminAll": "Admins can reach every store, so there is nothing to assign here.",
+  "sacc.notifyGranted": "🏬 You now have access to the store <b>{store}</b>.",
+  "sacc.notifyRevoked": "🏬 Your access to the store <b>{store}</b> has been withdrawn.",
+
   // ---------- Credit ----------
   "credit.new": "💳 <b>New credit</b>\n\nEnter the bank name:",
-  "credit.askTotal": "Enter the total credit amount:",
+  "credit.askMonthly": "Enter the <b>monthly instalment</b> amount:",
   "credit.askDuration":
-    "Total: <b>{amount}</b>\n\nEnter the duration in months (1–360):",
+    "Monthly instalment: <b>{amount}</b>\n\nOver how many months? Enter 1–360:",
   "credit.badDuration": "⚠️ Enter a whole number of months between 1 and 360.",
   "credit.created":
     "✅ <b>Credit created</b>\n\nBank: {bank}\nTotal: {total}\nDuration: {months} months\nMonthly payment: {monthly}\nFirst payment due: {due}",
@@ -103,6 +169,7 @@ const en = {
   "credit.notFound": "Credit not found.",
   "credit.cardTotal": "Total: {total}",
   "credit.cardDuration": "Duration: {months} months",
+  "credit.cardMonthly": "Monthly instalment: {monthly}",
   "credit.cardPaid": "Paid: {paid} ({count}/{total})",
   "credit.cardRemaining": "Remaining: {remaining}",
   "credit.cardStatus": "Status: {status}",
@@ -115,6 +182,9 @@ const en = {
   "credit.instalmentNotFound": "Instalment not found.",
   "credit.alreadyPaid": "Already marked as paid.",
   "credit.markedPaid": "✅ Marked as paid",
+  "credit.askSource": "Which account is this credit repaid from?",
+  "credit.expensePosted":
+    "✅ <b>Instalment paid</b>\n\n{bank} · {amount}\nAn expense of {amount} was posted to {source} for {company}.",
 
   // ---------- Entries ----------
   "entry.notFound": "Entry not found.",
@@ -132,6 +202,8 @@ const en = {
   "entry.deleteNo": "↩️ Cancel",
   "entry.deleted": "🗑 Deleted",
   "entry.deletedFull": "🗑 Entry deleted.",
+  "entry.autoLocked":
+    "This entry was posted automatically by the system and cannot be changed here.\nUndo it at its source instead — the credit instalment or the regular payment.",
   "entry.btnAmount": "✏️ Amount",
   "entry.btnComment": "📝 Comment",
   "entry.btnDelete": "🗑 Delete",
@@ -218,7 +290,9 @@ const en = {
   "xls.bank": "Bank",
   "xls.counterparty": "Counterparty",
   "xls.comment": "Comment",
+  "xls.company": "Company",
   "xls.addedBy": "Added by",
+  "xls.system": "System",
   "xls.role": "Role",
   "xls.dueDate": "Due date",
   "xls.status": "Status",
@@ -244,6 +318,9 @@ const en = {
   "cat.Transport": "Transport",
   "cat.Taxes": "Taxes",
   "cat.Other": "Other",
+  // Written by automatic postings rather than chosen by a user.
+  "cat.Credit payment": "Credit payment",
+  "cat.Regular payment": "Regular payment",
   // Synthetic buckets produced by the expense breakdown, not real categories.
   "cat.Bank transfers": "Bank transfers",
   "cat.Uncategorised": "Uncategorised",
@@ -267,6 +344,10 @@ const ru_: Record<TranslationKey, string> = {
   "btn.language": "🌐 Язык",
   "btn.cancel": "❌ Отмена",
   "btn.skip": "⏭ Пропустить",
+  "btn.changeStore": "🏬 Сменить магазин",
+  "btn.companies": "🏢 Магазины",
+  "btn.access": "🔑 Доступ к магазинам",
+  "btn.regular": "🔁 Регулярные платежи",
 
   // ---------- Roles ----------
   "role.ADMIN": "Администратор",
@@ -332,10 +413,73 @@ const ru_: Record<TranslationKey, string> = {
   "bank.askName": "Дата: <b>{date}</b>\n\nВведите название банка:",
   "bank.askParty": "Введите контрагента (кто заплатил / кому заплатили):",
 
+  // ---------- Компании ----------
+  "company.choose": "🏢 К какой компании относится запись?",
+  "company.chosen": "Компания: <b>{name}</b>",
+  "company.notFound": "Компания не найдена.",
+  "company.needOne":
+    "⚠️ Компании ещё не созданы.\n\nПопросите администратора добавить компанию перед вводом записей.",
+  "company.title": "🏢 <b>Компании</b>",
+  "company.listEmpty": "Компании ещё не добавлены.",
+  "company.btnAdd": "➕ Добавить компанию",
+  "company.askName": "Введите название компании:",
+  "company.added": "✅ Компания <b>{name}</b> добавлена.",
+  "company.exists": "⚠️ Компания с таким названием уже есть.",
+  "company.badName": "⚠️ Название должно быть от 2 до 60 символов.",
+
+  // ---------- Регулярные платежи ----------
+  "reg.title": "🔁 <b>Регулярные платежи</b>",
+  "reg.intro": "Они автоматически проводятся как расход в свой день каждого месяца.",
+  "reg.none": "Регулярные платежи ещё не настроены.",
+  "reg.btnAdd": "➕ Добавить платёж",
+  "reg.askName": "Введите название платежа.\n<i>Например: Аренда офиса</i>",
+  "reg.askAmount": "Введите сумму, списываемую каждый месяц:",
+  "reg.askDay":
+    "Сумма: <b>{amount}</b>\n\nВ какой день месяца списывается? Введите 1–31.\n<i>В коротких месяцах проводится в последний день.</i>",
+  "reg.badDay": "⚠️ Введите целое число от 1 до 31.",
+  "reg.askSource": "С какого счёта списывается?",
+  "reg.created":
+    "✅ <b>Регулярный платёж создан</b>\n\n{name}\nКомпания: {company}\nСумма: {amount}\nСписание: {day}-го числа каждого месяца\nСчёт: {source}",
+  "reg.item": "{name} · {amount} · {day}-го",
+  "reg.card":
+    "🔁 <b>{name}</b>\n\nКомпания: {company}\nСумма: {amount}\nСписание: {day}-го числа каждого месяца\nСчёт: {source}",
+  "reg.notFound": "Регулярный платёж не найден.",
+  "reg.confirmDelete": "Остановить этот регулярный платёж? Ранее проведённые записи сохраняются.",
+  "reg.deleteYes": "🗑 Да, остановить",
+  "reg.deleted": "🗑 Регулярный платёж остановлен.",
+
+  // ---------- Активный магазин ----------
+  "store.choose": "🏬 <b>Выберите магазин, в котором работаете:</b>",
+  "store.active":
+    "✅ Вы работаете с магазином: <b>{name}</b>.\nВсе ваши записи будут сохраняться в него.",
+  "store.current": "🏬 Текущий магазин: <b>{name}</b>",
+  "store.unchanged": "Вы уже работаете с магазином {name}.",
+  "store.none":
+    "⚠️ Вам пока не назначен ни один магазин.\n\nПопросите администратора выдать доступ, прежде чем вводить записи.",
+  "store.notSelected":
+    "⚠️ <b>Магазин не выбран.</b>\n\nНажмите 🏬 Сменить магазин и выберите тот, в котором работаете, — без этого записи не сохраняются.",
+  "store.noAccess": "⛔️ У вас нет доступа к этому магазину.",
+  "store.notFound": "Магазин не найден.",
+  "store.revoked":
+    "🏬 Ваш доступ к этому магазину отозван, поэтому он больше не выбран.",
+
+  // ---------- Доступ к магазинам (админ) ----------
+  "sacc.title": "🔑 <b>Доступ к магазинам</b>\n\nВыберите пользователя:",
+  "sacc.noUsers": "Активных пользователей пока нет.",
+  "sacc.noStores": "Магазины ещё не созданы.",
+  "sacc.user":
+    "🔑 <b>{name}</b> — {role}\n\nНажмите на магазин, чтобы выдать или отозвать доступ. ✅ — доступ есть.",
+  "sacc.granted": "✅ Доступ выдан: {store}",
+  "sacc.revoked": "🚫 Доступ отозван: {store}",
+  "sacc.adminAll": "У администраторов есть доступ ко всем магазинам, назначать нечего.",
+  "sacc.notifyGranted": "🏬 Вам открыт доступ к магазину <b>{store}</b>.",
+  "sacc.notifyRevoked": "🏬 Ваш доступ к магазину <b>{store}</b> отозван.",
+
   // ---------- Credit ----------
   "credit.new": "💳 <b>Новый кредит</b>\n\nВведите название банка:",
-  "credit.askTotal": "Введите общую сумму кредита:",
-  "credit.askDuration": "Сумма: <b>{amount}</b>\n\nВведите срок в месяцах (1–360):",
+  "credit.askMonthly": "Введите сумму <b>ежемесячного платежа</b>:",
+  "credit.askDuration":
+    "Ежемесячный платёж: <b>{amount}</b>\n\nНа сколько месяцев? Введите 1–360:",
   "credit.badDuration": "⚠️ Введите целое число месяцев от 1 до 360.",
   "credit.created":
     "✅ <b>Кредит создан</b>\n\nБанк: {bank}\nСумма: {total}\nСрок: {months} мес.\nЕжемесячный платёж: {monthly}\nПервый платёж: {due}",
@@ -345,6 +489,7 @@ const ru_: Record<TranslationKey, string> = {
   "credit.notFound": "Кредит не найден.",
   "credit.cardTotal": "Сумма: {total}",
   "credit.cardDuration": "Срок: {months} мес.",
+  "credit.cardMonthly": "Ежемесячный платёж: {monthly}",
   "credit.cardPaid": "Оплачено: {paid} ({count}/{total})",
   "credit.cardRemaining": "Остаток: {remaining}",
   "credit.cardStatus": "Статус: {status}",
@@ -357,6 +502,9 @@ const ru_: Record<TranslationKey, string> = {
   "credit.instalmentNotFound": "Платёж не найден.",
   "credit.alreadyPaid": "Уже отмечен как оплаченный.",
   "credit.markedPaid": "✅ Отмечено как оплачено",
+  "credit.askSource": "С какого счёта погашается кредит?",
+  "credit.expensePosted":
+    "✅ <b>Платёж проведён</b>\n\n{bank} · {amount}\nРасход {amount} проведён по счёту «{source}» для «{company}».",
 
   // ---------- Entries ----------
   "entry.notFound": "Запись не найдена.",
@@ -375,6 +523,8 @@ const ru_: Record<TranslationKey, string> = {
   "entry.deleteNo": "↩️ Отмена",
   "entry.deleted": "🗑 Удалено",
   "entry.deletedFull": "🗑 Запись удалена.",
+  "entry.autoLocked":
+    "Эта запись создана системой автоматически и не редактируется здесь.\nОтмените её в источнике — в платеже по кредиту или в регулярном платеже.",
   "entry.btnAmount": "✏️ Сумма",
   "entry.btnComment": "📝 Комментарий",
   "entry.btnDelete": "🗑 Удалить",
@@ -462,7 +612,9 @@ const ru_: Record<TranslationKey, string> = {
   "xls.bank": "Банк",
   "xls.counterparty": "Контрагент",
   "xls.comment": "Комментарий",
+  "xls.company": "Компания",
   "xls.addedBy": "Добавил",
+  "xls.system": "Система",
   "xls.role": "Роль",
   "xls.dueDate": "Срок платежа",
   "xls.status": "Статус",
@@ -488,6 +640,8 @@ const ru_: Record<TranslationKey, string> = {
   "cat.Transport": "Транспорт",
   "cat.Taxes": "Налоги",
   "cat.Other": "Прочее",
+  "cat.Credit payment": "Платёж по кредиту",
+  "cat.Regular payment": "Регулярный платёж",
   "cat.Bank transfers": "Банковские переводы",
   "cat.Uncategorised": "Без категории",
 };
@@ -561,6 +715,10 @@ export function allMenuLabels(): Set<string> {
     "btn.logs",
     "btn.users",
     "btn.requests",
+    "btn.changeStore",
+    "btn.access",
+    "btn.companies",
+    "btn.regular",
     "btn.language",
     "btn.cancel",
   ];

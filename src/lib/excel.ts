@@ -53,19 +53,32 @@ export async function buildMonthlyWorkbook(
 
   const [transactions, payments] = await Promise.all([
     prisma.transaction.findMany({
-      where: { date: { gte: from, lte: to } },
+      where: { date: { gte: from, lte: to }, isDeleted: false },
       orderBy: { date: "asc" },
-      include: { user: { select: { name: true, role: true } } },
+      include: {
+        user: { select: { name: true, role: true } },
+        company: { select: { name: true } },
+      },
     }),
     prisma.creditPayment.findMany({
       where: {
+        isDeleted: false,
+        credit: { isDeleted: false },
         OR: [
           { dueDate: { gte: from, lte: to } },
           { paidDate: { gte: from, lte: to } },
         ],
       },
       orderBy: { dueDate: "asc" },
-      include: { credit: { select: { bankName: true, currency: true } } },
+      include: {
+        credit: {
+          select: {
+            bankName: true,
+            currency: true,
+            company: { select: { name: true } },
+          },
+        },
+      },
     }),
   ]);
 
@@ -74,6 +87,7 @@ export async function buildMonthlyWorkbook(
   // --- Transactions ---
   const txRows = transactions.map((tx) => [
     format(tx.date, "dd.MM.yyyy"),
+    tx.company.name,
     tr(tx.source === "CASH" ? "common.cash" : "common.bank"),
     tr(tx.type === "INCOME" ? "common.income" : "common.expense"),
     toNumber(tx.amount),
@@ -82,8 +96,8 @@ export async function buildMonthlyWorkbook(
     tx.bankName ?? "",
     tx.counterparty ?? "",
     tx.comment ?? "",
-    tx.user.name,
-    tr(`role.${tx.user.role}`),
+    tx.user?.name ?? tr("xls.system"),
+    tx.user ? tr(`role.${tx.user.role}`) : "",
   ]);
 
   XLSX.utils.book_append_sheet(
@@ -91,6 +105,7 @@ export async function buildMonthlyWorkbook(
     sheetFromRows(
       [
         tr("xls.date"),
+        tr("xls.company"),
         tr("xls.source"),
         tr("xls.type"),
         tr("xls.amount"),
@@ -103,14 +118,15 @@ export async function buildMonthlyWorkbook(
         tr("xls.role"),
       ],
       txRows,
-      [3],
-      [12, 10, 10, 16, 10, 18, 18, 22, 30, 18, 12]
+      [4],
+      [12, 18, 10, 10, 16, 10, 18, 18, 22, 30, 18, 12]
     ),
     tr("xls.sheetTransactions")
   );
 
   // --- Credit instalments ---
   const paymentRows = payments.map((payment) => [
+    payment.credit.company.name,
     payment.credit.bankName,
     format(payment.dueDate, "dd.MM.yyyy"),
     toNumber(payment.amount),
@@ -123,6 +139,7 @@ export async function buildMonthlyWorkbook(
     workbook,
     sheetFromRows(
       [
+        tr("xls.company"),
         tr("xls.bank"),
         tr("xls.dueDate"),
         tr("xls.amount"),
@@ -131,8 +148,8 @@ export async function buildMonthlyWorkbook(
         tr("xls.paidOn"),
       ],
       paymentRows,
-      [2],
-      [22, 14, 16, 10, 12, 14]
+      [3],
+      [18, 22, 14, 16, 10, 12, 14]
     ),
     tr("xls.sheetPayments")
   );

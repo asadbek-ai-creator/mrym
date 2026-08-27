@@ -7,28 +7,38 @@ import { logAction, requireModule } from "../auth";
 import { cancelMenu, dateKeyboard, skipKeyboard } from "../keyboards";
 import { labels } from "../i18n";
 import { clearInlineKeyboard, onStep, replySaved } from "../helpers";
+import { requireActiveStore, storeLine } from "../stores";
 import { fmtDate, parseDate } from "../format";
 import type { BotContext } from "../types";
 
 /**
  * Bank wizard: amount → date → bank name → counterparty → comment.
  * Steps are `bank:amount`, `bank:date`, `bank:name`, `bank:party`, `bank:comment`.
+ *
+ * Filed against the user's active store, which is chosen once rather than per
+ * entry.
  */
 export const bankFlow = new Composer<BotContext>();
 
 async function start(ctx: BotContext, type: TxType) {
   ctx.session.step = "bank:amount";
-  ctx.session.draft = { type };
+  ctx.session.draft = { type, companyId: ctx.activeCompany!.id };
+
   await ctx.reply(
-    `${ctx.t(`bank.title.${type}`)}\n\n${ctx.t("bank.askAmount")}`,
+    [
+      ctx.t(`bank.title.${type}`),
+      storeLine(ctx),
+      "",
+      ctx.t("bank.askAmount"),
+    ].join("\n"),
     { parse_mode: "HTML", reply_markup: cancelMenu(ctx.locale) }
   );
 }
 
-bankFlow.hears(labels("btn.bankIncome"), requireModule("BANK"), (ctx) =>
+bankFlow.hears(labels("btn.bankIncome"), requireModule("BANK"), requireActiveStore, (ctx) =>
   start(ctx, TxType.INCOME)
 );
-bankFlow.hears(labels("btn.bankExpense"), requireModule("BANK"), (ctx) =>
+bankFlow.hears(labels("btn.bankExpense"), requireModule("BANK"), requireActiveStore, (ctx) =>
   start(ctx, TxType.EXPENSE)
 );
 
@@ -129,6 +139,7 @@ async function save(ctx: BotContext, comment: string | null) {
       bankName: draft.bankName as string,
       counterparty: draft.counterparty as string,
       comment,
+      companyId: draft.companyId as string,
       userId: ctx.user.id,
     },
   });
@@ -136,7 +147,8 @@ async function save(ctx: BotContext, comment: string | null) {
   await logAction(
     ctx.user.id,
     `BANK_${tx.type}_CREATED`,
-    `${formatMoney(draft.amount as number, tx.currency)} · ${tx.bankName} · ${tx.counterparty}`
+    `${formatMoney(draft.amount as number, tx.currency)} · ${tx.bankName} · ${tx.counterparty}`,
+    tx.companyId
   );
   await replySaved(ctx, tx);
 }

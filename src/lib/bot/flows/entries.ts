@@ -1,11 +1,12 @@
 import { Composer, InlineKeyboard } from "grammy";
-import { Role, type Transaction } from "@prisma/client";
+import { Role, TxOrigin, type Transaction } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { formatMoney, parseAmount, toNumber } from "@/lib/money";
 import { EDIT_WINDOW_MS, logAction, withinEditWindow } from "../auth";
 import { cancelMenu } from "../keyboards";
 import { labels } from "../i18n";
 import { entryActions, finish, onePerRow, onStep } from "../helpers";
+import { requireActiveStore } from "../stores";
 import { txCard, txLine } from "../format";
 import type { BotContext } from "../types";
 
@@ -24,7 +25,19 @@ type Permission = { allowed: true; tx: Transaction } | { allowed: false; reason:
 
 async function checkEditable(ctx: BotContext, txId: string): Promise<Permission> {
   const tx = await prisma.transaction.findUnique({ where: { id: txId } });
-  if (!tx) return { allowed: false, reason: ctx.t("entry.notFound") };
+  if (!tx || tx.isDeleted) return { allowed: false, reason: ctx.t("entry.notFound") };
+
+  // A button from another store may still be on screen.
+  if (tx.companyId !== ctx.activeCompany?.id) {
+    return { allowed: false, reason: ctx.t("store.noAccess") };
+  }
+
+  // Automatic postings mirror a credit instalment or a regular payment.
+  // Editing one here would leave the two out of step, so the source is the
+  // only place they can be undone — for admins too.
+  if (tx.origin !== TxOrigin.MANUAL) {
+    return { allowed: false, reason: ctx.t("entry.autoLocked") };
+  }
 
   if (ctx.role === Role.ADMIN) return { allowed: true, tx };
 
@@ -44,9 +57,15 @@ async function checkEditable(ctx: BotContext, txId: string): Promise<Permission>
 
 // ---------- Listing ----------
 
-entriesFlow.hears(labels("btn.myEntries"), async (ctx) => {
+entriesFlow.hears(labels("btn.myEntries"), requireActiveStore, async (ctx) => {
   const entries = await prisma.transaction.findMany({
-    where: { userId: ctx.user.id },
+    // Scoped to the open store, so a correction can only ever touch the books
+    // the user is standing in.
+    where: {
+      userId: ctx.user.id,
+      isDeleted: false,
+      companyId: ctx.activeCompany!.id,
+    },
     orderBy: { createdAt: "desc" },
     take: RECENT_LIMIT,
   });
@@ -68,9 +87,9 @@ entriesFlow.hears(labels("btn.myEntries"), async (ctx) => {
   });
 });
 
-entriesFlow.callbackQuery(/^txopen:(.+)$/, async (ctx) => {
+entriesFlow.callbackQuery(/^txopen:(.+)$/, requireActiveStore, async (ctx) => {
   const tx = await prisma.transaction.findUnique({ where: { id: ctx.match![1] } });
-  if (!tx) {
+  if (!tx || tx.isDeleted || tx.companyId !== ctx.activeCompany?.id) {
     await ctx.answerCallbackQuery(ctx.t("entry.notFound"));
     return;
   }
@@ -124,7 +143,8 @@ onStep(entriesFlow, "edit:amount", async (ctx) => {
   await logAction(
     ctx.user.id,
     "TRANSACTION_AMOUNT_EDITED",
-    `${before} → ${formatMoney(parsed.amount, parsed.currency)}`
+    `${before} → ${formatMoney(parsed.amount, parsed.currency)}`,
+    tx.companyId
   );
   await finish(ctx, `${ctx.t("entry.amountUpdated")}\n\n${txCard(tx, ctx.locale)}`);
 });
@@ -157,7 +177,12 @@ onStep(entriesFlow, "edit:comment", async (ctx) => {
     data: { comment: ctx.message!.text!.trim() },
   });
 
-  await logAction(ctx.user.id, "TRANSACTION_COMMENT_EDITED", tx.comment ?? "");
+  await logAction(
+    ctx.user.id,
+    "TRANSACTION_COMMENT_EDITED",
+    tx.comment ?? "",
+    tx.companyId
+  );
   await finish(ctx, `${ctx.t("entry.commentUpdated")}\n\n${txCard(tx, ctx.locale)}`);
 });
 
@@ -193,11 +218,17 @@ entriesFlow.callbackQuery(/^txdelyes:(.+)$/, async (ctx) => {
     return;
   }
 
-  await prisma.transaction.delete({ where: { id: check.tx.id } });
+  // Soft delete: financial records are never dropped, so the action log can
+  // still show what was removed, by whom, and for how much.
+  await prisma.transaction.update({
+    where: { id: check.tx.id },
+    data: { isDeleted: true, deletedAt: new Date() },
+  });
   await logAction(
     ctx.user.id,
     "TRANSACTION_DELETED",
-    `${check.tx.source} ${check.tx.type} · ${formatMoney(toNumber(check.tx.amount), check.tx.currency)}`
+    `${check.tx.source} ${check.tx.type} · ${formatMoney(toNumber(check.tx.amount), check.tx.currency)}`,
+    check.tx.companyId
   );
 
   await ctx.answerCallbackQuery(ctx.t("entry.deleted"));

@@ -8,12 +8,17 @@ import { initialSession, type BotContext, type SessionData } from "./types";
 import { languageKeyboard, mainMenu } from "./keyboards";
 import { allMenuLabels, labels, roleLabel, translator } from "./i18n";
 import { resetSession } from "./helpers";
+import { accessibleStores, promptStoreChoice, setActiveStore } from "./stores";
+import { esc } from "./format";
 import { cashFlow } from "./flows/cash";
 import { bankFlow } from "./flows/bank";
 import { creditFlow } from "./flows/credit";
 import { entriesFlow } from "./flows/entries";
 import { reportsFlow } from "./flows/reports";
 import { adminFlow } from "./flows/admin";
+import { companiesFlow } from "./flows/companies";
+import { accessFlow } from "./flows/access";
+import { regularFlow } from "./flows/regular";
 
 const MENU_LABELS = allMenuLabels();
 
@@ -53,7 +58,7 @@ function createBot(): Bot<BotContext> {
     if (can(ctx.role, "CREDIT")) sections.push(ctx.t("start.section.credits"));
     if (can(ctx.role, "ADMIN")) sections.push(ctx.t("start.section.admin"));
 
-    await logAction(ctx.user.id, "BOT_START");
+    await logAction(ctx.user.id, "BOT_START", undefined, ctx.activeCompany?.id);
     await ctx.reply(
       ctx.t("start.greeting", {
         name: ctx.user.name,
@@ -62,6 +67,45 @@ function createBot(): Bot<BotContext> {
       }),
       { parse_mode: "HTML", reply_markup: mainMenu(ctx.role, ctx.locale) }
     );
+    await promptStoreChoice(ctx);
+  });
+
+  // Switching stores is deliberate and always available.
+  bot.hears(labels("btn.changeStore"), promptStoreChoice);
+  bot.command("store", promptStoreChoice);
+
+  bot.callbackQuery(/^store:(.+)$/, async (ctx) => {
+    const companyId = ctx.match![1];
+
+    // Re-derive what this user may reach instead of trusting the button: the
+    // keyboard may have been sitting on screen since before access changed.
+    const stores = await accessibleStores(ctx.user);
+    const target = stores.find((store) => store.id === companyId);
+    if (!target) {
+      await ctx.answerCallbackQuery({
+        text: ctx.t("store.noAccess"),
+        show_alert: true,
+      });
+      return;
+    }
+
+    if (ctx.activeCompany?.id === target.id) {
+      await ctx.answerCallbackQuery(
+        ctx.t("store.unchanged", { name: target.name })
+      );
+      return;
+    }
+
+    const store = await setActiveStore(ctx.user.id, target.id);
+    ctx.activeCompany = store;
+
+    await logAction(ctx.user.id, "STORE_SWITCHED", store.name, store.id);
+    await ctx.answerCallbackQuery(store.name);
+    await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => undefined);
+    await ctx.reply(ctx.t("store.active", { name: esc(store.name) }), {
+      parse_mode: "HTML",
+      reply_markup: mainMenu(ctx.role, ctx.locale),
+    });
   });
 
   bot.command("menu", (ctx) =>
@@ -120,6 +164,9 @@ function createBot(): Bot<BotContext> {
   bot.use(entriesFlow);
   bot.use(reportsFlow);
   bot.use(adminFlow);
+  bot.use(companiesFlow);
+  bot.use(accessFlow);
+  bot.use(regularFlow);
 
   // 7. Anything unrecognised.
   bot.on("message", (ctx) =>

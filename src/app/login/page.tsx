@@ -1,16 +1,13 @@
+import { Suspense } from "react";
 import { LoginForm } from "./login-form";
 
 export const metadata = { title: "Вход · Mariyam" };
 
-export default async function LoginPage(props: PageProps<"/login">) {
-  const params = await props.searchParams;
-  const raw = params.next;
-  const requested = Array.isArray(raw) ? raw[0] : raw;
-  const next =
-    requested?.startsWith("/") && !requested.startsWith("//")
-      ? requested
-      : "/dashboard";
-
+/**
+ * The card around the form is static, so it prerenders. Only the redirect
+ * target comes from the URL, and that waits behind its own boundary.
+ */
+export default function LoginPage(props: PageProps<"/login">) {
   return (
     <main className="flex flex-1 items-center justify-center px-6 py-16">
       <div className="w-full max-w-sm">
@@ -27,7 +24,9 @@ export default async function LoginPage(props: PageProps<"/login">) {
         </div>
 
         <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-6 shadow-sm">
-          <LoginForm next={next} />
+          <Suspense fallback={<FormSkeleton />}>
+            <Form searchParams={props.searchParams} />
+          </Suspense>
         </div>
 
         <p className="mt-6 text-center text-xs text-[var(--ink-muted)]">
@@ -35,5 +34,32 @@ export default async function LoginPage(props: PageProps<"/login">) {
         </p>
       </div>
     </main>
+  );
+}
+
+async function Form({
+  searchParams,
+}: {
+  searchParams: PageProps<"/login">["searchParams"];
+}) {
+  const params = await searchParams;
+  const raw = params.next;
+  const requested = Array.isArray(raw) ? raw[0] : raw;
+  // Only same-origin paths are followed, so `?next=` cannot bounce a signed-in
+  // admin to another site.
+  const next =
+    requested?.startsWith("/") && !requested.startsWith("//")
+      ? requested
+      : "/dashboard";
+
+  return <LoginForm next={next} />;
+}
+
+function FormSkeleton() {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="h-10 animate-pulse rounded-lg bg-[var(--surface-sunken)]" />
+      <div className="h-10 animate-pulse rounded-lg bg-[var(--surface-sunken)]" />
+    </div>
   );
 }

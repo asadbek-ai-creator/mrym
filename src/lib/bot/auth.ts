@@ -1,4 +1,4 @@
-import { Locale, Role, UserStatus, type User } from "@prisma/client";
+import { Locale, Role, UserStatus, type Company, type User } from "@prisma/client";
 import { InlineKeyboard, type MiddlewareFn } from "grammy";
 import { prisma } from "@/lib/prisma";
 import { bootstrapAdminIds } from "@/lib/env";
@@ -91,8 +91,43 @@ export const authMiddleware: MiddlewareFn<BotContext> = async (ctx, next) => {
   ctx.role = user.role;
   ctx.locale = user.language;
   ctx.t = translator(user.language);
+  ctx.activeCompany = await resolveActiveStore(user);
   await next();
 };
+
+/**
+ * Reads the user's active store and confirms they may still use it.
+ *
+ * Access can be withdrawn between two updates, and the selection outlives the
+ * grant that justified it. Re-checking here — rather than trusting the stored
+ * id — is what stops a revoked cashier from continuing to post into a store
+ * they were removed from.
+ */
+async function resolveActiveStore(user: User): Promise<Company | null> {
+  if (!user.activeCompanyId) return null;
+
+  const store = await prisma.company.findUnique({
+    where: { id: user.activeCompanyId },
+  });
+  if (!store) return null;
+
+  if (user.role !== Role.ADMIN) {
+    const access = await prisma.companyAccess.findUnique({
+      where: { userId_companyId: { userId: user.id, companyId: store.id } },
+    });
+    if (!access) {
+      // Clear it so the next update does not repeat this lookup, and so the
+      // user is asked to choose again rather than left in a stale store.
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { activeCompanyId: null },
+      });
+      return null;
+    }
+  }
+
+  return store;
+}
 
 /**
  * Pushes a new request to every active admin. Admins who have never opened
@@ -146,11 +181,20 @@ export function requireModule(module: Module): MiddlewareFn<BotContext> {
   };
 }
 
-/** Appends an entry to the audit trail shown on the dashboard. */
+/**
+ * Appends an entry to the audit trail shown on the dashboard.
+ *
+ * `companyId` is what lets the dashboard's company filter apply to the log as
+ * well; account-level actions (access requests, language changes) leave it
+ * null and therefore show under every company.
+ */
 export async function logAction(
   userId: string | null,
   action: string,
-  details?: string
+  details?: string,
+  companyId?: string | null
 ): Promise<void> {
-  await prisma.actionLog.create({ data: { userId, action, details } });
+  await prisma.actionLog.create({
+    data: { userId, action, details, companyId: companyId ?? null },
+  });
 }

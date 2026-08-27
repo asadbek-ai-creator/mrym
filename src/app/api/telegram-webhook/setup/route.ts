@@ -1,9 +1,6 @@
 import { getBot } from "@/lib/bot";
 import { webhookSecret } from "@/lib/env";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 /**
  * One-shot webhook registration.
  *

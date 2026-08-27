@@ -11,27 +11,37 @@ import {
 } from "../keyboards";
 import { categoryLabel, labels } from "../i18n";
 import { clearInlineKeyboard, onStep, replySaved } from "../helpers";
+import { requireActiveStore, storeLine } from "../stores";
 import type { BotContext } from "../types";
 
 /**
  * Cash wizard: amount → category → comment.
  * Steps are `cash:amount`, `cash:category`, `cash:comment`.
+ *
+ * The store is never asked for. It is whatever the user last switched to, so
+ * a shift cannot drift into the wrong books one entry at a time.
  */
 export const cashFlow = new Composer<BotContext>();
 
 async function start(ctx: BotContext, type: TxType) {
   ctx.session.step = "cash:amount";
-  ctx.session.draft = { type };
+  ctx.session.draft = { type, companyId: ctx.activeCompany!.id };
+
   await ctx.reply(
-    `${ctx.t(`cash.title.${type}`)}\n\n${ctx.t("cash.askAmount")}`,
+    [
+      ctx.t(`cash.title.${type}`),
+      storeLine(ctx),
+      "",
+      ctx.t("cash.askAmount"),
+    ].join("\n"),
     { parse_mode: "HTML", reply_markup: cancelMenu(ctx.locale) }
   );
 }
 
-cashFlow.hears(labels("btn.cashIncome"), requireModule("CASH"), (ctx) =>
+cashFlow.hears(labels("btn.cashIncome"), requireModule("CASH"), requireActiveStore, (ctx) =>
   start(ctx, TxType.INCOME)
 );
-cashFlow.hears(labels("btn.cashExpense"), requireModule("CASH"), (ctx) =>
+cashFlow.hears(labels("btn.cashExpense"), requireModule("CASH"), requireActiveStore, (ctx) =>
   start(ctx, TxType.EXPENSE)
 );
 
@@ -93,6 +103,7 @@ async function save(ctx: BotContext, comment: string | null) {
       currency: draft.currency as "UZS" | "USD",
       category: draft.category as string,
       comment,
+      companyId: draft.companyId as string,
       userId: ctx.user.id,
     },
   });
@@ -100,7 +111,8 @@ async function save(ctx: BotContext, comment: string | null) {
   await logAction(
     ctx.user.id,
     `CASH_${tx.type}_CREATED`,
-    `${formatMoney(draft.amount as number, tx.currency)} · ${tx.category}`
+    `${formatMoney(draft.amount as number, tx.currency)} · ${tx.category}`,
+    tx.companyId
   );
   await replySaved(ctx, tx);
 }
