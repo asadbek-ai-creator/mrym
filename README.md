@@ -27,6 +27,22 @@ refused and shown their own ID to pass to an admin. IDs listed in
 how the first owner gets in. After that, admins add people from the bot's
 **👥 Users** screen.
 
+That screen lists everyone as a button: tap a person to open their card and
+set their role — including `ADMIN`, which asks for a second tap — or revoke,
+restore and delete their account. `/adduser <id> <role> <name>` still exists
+for someone who has never opened the bot, and `/deluser <id>` mirrors the
+delete button.
+
+Three things the screen refuses, because each one would leave the system
+without a way in:
+
+- changing or revoking your own account;
+- demoting or revoking the last active admin;
+- demoting an ID listed in `ADMIN_TELEGRAM_IDS` — the auth middleware repairs
+  those rows back to an active `ADMIN` on the owner's next message, so handing
+  over ownership for good means editing that variable (locally and in Vercel)
+  and redeploying.
+
 Entry authors can correct their own amount/comment, or delete an entry, for 30
 minutes after creating it (`EDIT_WINDOW_MS` in `src/lib/bot/auth.ts`).
 

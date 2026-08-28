@@ -1,4 +1,4 @@
-import { Locale, Role, TxType } from "@prisma/client";
+import { Locale, Role, TxType, UserStatus } from "@prisma/client";
 import { enUS, ru } from "date-fns/locale";
 
 /**
@@ -36,6 +36,11 @@ const en = {
   "role.ADMIN.badge": "👑 Admin",
   "role.ACCOUNTANT.badge": "📚 Accountant",
   "role.CASHIER.badge": "💵 Cashier",
+
+  // ---------- Account status ----------
+  "status.PENDING": "⏳ Awaiting decision",
+  "status.ACTIVE": "✅ Active",
+  "status.REJECTED": "🚫 No access",
 
   // ---------- Common ----------
   "common.cash": "Cash",
@@ -238,7 +243,31 @@ const en = {
   "admin.system": "system",
   "admin.usersTitle": "👥 <b>Users ({count})</b>",
   "admin.usersHelp":
-    "Add or change a user:\n<code>/adduser &lt;telegram_id&gt; &lt;cashier|accountant|admin&gt; &lt;name&gt;</code>\nRemove a user:\n<code>/deluser &lt;telegram_id&gt;</code>",
+    "Tap a user to change their role or access.\n\nSomeone who has never opened the bot can be added with\n<code>/adduser &lt;telegram_id&gt; &lt;cashier|accountant|admin&gt; &lt;name&gt;</code>",
+  "admin.usersEmpty": "There are no users yet.",
+  "admin.userCard":
+    "{badge} — <b>{name}</b>\n<code>{id}</code>\n\nStatus: {status}\nStores: {stores}\nEntries: {transactions} · Credits: {credits}\n\nChoose a role:",
+  "admin.btnBack": "⬅️ Back to the list",
+  "admin.cannotChangeSelf": "⚠️ You cannot change your own role.",
+  "admin.roleUnchanged": "Already {role}.",
+  "admin.lastAdmin":
+    "⚠️ This is the only admin left. Make someone else an admin first.",
+  "admin.bootstrapLocked":
+    "⚠️ This Telegram ID is listed in ADMIN_TELEGRAM_IDS, so the bot restores its admin rights automatically. Remove the ID from that variable and redeploy first.",
+  "admin.confirmAdmin":
+    "👑 Make <b>{name}</b> an admin?\n\nAn admin sees every store, the action log and the dashboard, and can change other people's roles.",
+  "admin.btnConfirmAdmin": "👑 Yes, make admin",
+  "admin.roleChanged": "✅ <b>{name}</b> — {role} now.",
+  "admin.roleChangedNotice": "Your role has been changed to: {role}.",
+  "admin.grantStoresHint":
+    "\n\n⚠️ This user holds no stores yet — grant them some under 🔑 Store access, otherwise they cannot post anything.",
+  "admin.btnRestore": "✅ Grant access",
+  "admin.accessRestored": "✅ <b>{name}</b> now has access.",
+  "admin.accessRestoredNotice": "✅ Your access is open.",
+  "admin.btnDelete": "🗑 Delete",
+  "admin.confirmDelete":
+    "🗑 Delete <b>{name}</b>?\n\nThe account disappears completely; they would have to request access again.",
+  "admin.btnConfirmDelete": "🗑 Yes, delete",
   "admin.addUserUsage": "Usage:\n<code>/adduser 123456789 cashier Aziz Karimov</code>",
   "admin.idMustBeNumber": "⚠️ The Telegram ID must be a number.",
   "admin.badRole": "⚠️ Role must be one of: cashier, accountant, admin.",
@@ -356,6 +385,11 @@ const ru_: Record<TranslationKey, string> = {
   "role.ADMIN.badge": "👑 Администратор",
   "role.ACCOUNTANT.badge": "📚 Бухгалтер",
   "role.CASHIER.badge": "💵 Кассир",
+
+  // ---------- Account status ----------
+  "status.PENDING": "⏳ Ждёт решения",
+  "status.ACTIVE": "✅ Активен",
+  "status.REJECTED": "🚫 Без доступа",
 
   // ---------- Common ----------
   "common.cash": "Касса",
@@ -559,7 +593,31 @@ const ru_: Record<TranslationKey, string> = {
   "admin.system": "система",
   "admin.usersTitle": "👥 <b>Пользователи ({count})</b>",
   "admin.usersHelp":
-    "Добавить или изменить пользователя:\n<code>/adduser &lt;telegram_id&gt; &lt;cashier|accountant|admin&gt; &lt;имя&gt;</code>\nУдалить пользователя:\n<code>/deluser &lt;telegram_id&gt;</code>",
+    "Нажмите на пользователя, чтобы изменить роль или доступ.\n\nЧеловека, который ещё ни разу не открывал бота, можно добавить командой\n<code>/adduser &lt;telegram_id&gt; &lt;cashier|accountant|admin&gt; &lt;имя&gt;</code>",
+  "admin.usersEmpty": "Пользователей пока нет.",
+  "admin.userCard":
+    "{badge} — <b>{name}</b>\n<code>{id}</code>\n\nСтатус: {status}\nМагазинов: {stores}\nЗаписей: {transactions} · Кредитов: {credits}\n\nВыберите роль:",
+  "admin.btnBack": "⬅️ К списку",
+  "admin.cannotChangeSelf": "⚠️ Вы не можете изменить собственную роль.",
+  "admin.roleUnchanged": "Уже {role}.",
+  "admin.lastAdmin":
+    "⚠️ Это единственный администратор. Сначала назначьте администратором кого-то ещё.",
+  "admin.bootstrapLocked":
+    "⚠️ Этот Telegram ID указан в ADMIN_TELEGRAM_IDS, поэтому бот сам возвращает ему права администратора. Сначала уберите ID из этой переменной и передеплойте.",
+  "admin.confirmAdmin":
+    "👑 Назначить <b>{name}</b> администратором?\n\nАдминистратор видит все магазины, журнал действий и дашборд, а также может менять роли другим.",
+  "admin.btnConfirmAdmin": "👑 Да, назначить",
+  "admin.roleChanged": "✅ <b>{name}</b> — теперь {role}.",
+  "admin.roleChangedNotice": "Ваша роль изменена: {role}.",
+  "admin.grantStoresHint":
+    "\n\n⚠️ У этого пользователя нет ни одного магазина — выдайте их в разделе 🔑 Доступ к магазинам, иначе он не сможет вносить записи.",
+  "admin.btnRestore": "✅ Открыть доступ",
+  "admin.accessRestored": "✅ Доступ открыт для <b>{name}</b>.",
+  "admin.accessRestoredNotice": "✅ Вам открыт доступ к боту.",
+  "admin.btnDelete": "🗑 Удалить",
+  "admin.confirmDelete":
+    "🗑 Удалить <b>{name}</b>?\n\nУчётная запись исчезнет полностью; человеку придётся заново запрашивать доступ.",
+  "admin.btnConfirmDelete": "🗑 Да, удалить",
   "admin.addUserUsage":
     "Формат:\n<code>/adduser 123456789 cashier Азиз Каримов</code>",
   "admin.idMustBeNumber": "⚠️ Telegram ID должен быть числом.",
@@ -756,4 +814,8 @@ export function roleLabel(locale: Locale, role: Role): string {
 
 export function roleBadge(locale: Locale, role: Role): string {
   return t(locale, `role.${role}.badge` as TranslationKey);
+}
+
+export function statusLabel(locale: Locale, status: UserStatus): string {
+  return t(locale, `status.${status}` as TranslationKey);
 }
